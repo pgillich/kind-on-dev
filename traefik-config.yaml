@@ -1,7 +1,7 @@
 dashboard:
   enabled: true
-  domain: "#OAM_DOMAIN#"
-loadBalancerIP: "#OAM_IP#"
+  domain: "${OAM_DOMAIN}"
+loadBalancerIP: "${OAM_IP}"
 rbac:
   enabled: true
 ssl:

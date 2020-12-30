@@ -27,7 +27,7 @@ metadata:
     traefik.ingress.kubernetes.io/rule-type: "PathPrefixStrip"
 spec:
   rules:
-    - host: "#OAM_DOMAIN#"
+    - host: "${OAM_DOMAIN}"
       http:
         paths:
           - path: /kubernetes
