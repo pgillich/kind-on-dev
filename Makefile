@@ -2,7 +2,17 @@ include .env
 
 .SILENT: post-help
 
-all: cluster flannel metallb helm metrics traefik dashboard post-help
+#all: cluster flannel metallb helm metrics traefik dashboard post-help
+all: cluster flannel metallb helm traefik dashboard post-help
+
+docker:
+	sudo apt-get update
+	sudo apt-get install apt-transport-https ca-certificates curl gnupg-agent software-properties-common
+	curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+	sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu `lsb_release -cs` stable"
+	sudo apt-get update
+	sudo apt-get install docker-ce docker-ce-cli containerd.io
+	sudo usermod -aG docker `id -un`
 
 kubectl:
 	sudo apt-get update && sudo apt-get install -y apt-transport-https gnupg2 curl
@@ -44,6 +54,7 @@ helm:
 	curl -sfL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
 
 	helm repo add stable https://charts.helm.sh/stable
+	helm repo update
 
 metrics:
 	helm install metrics-server stable/metrics-server --version ${METRICS_VERSION} --set 'args={--kubelet-insecure-tls, --kubelet-preferred-address-types=InternalIP}' --namespace kube-system
@@ -55,6 +66,14 @@ dashboard:
 	kubectl create -f https://raw.githubusercontent.com/kubernetes/dashboard/${DASHBOARD_VERSION}/aio/deploy/alternative.yaml
 
 	cat dashboard-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} envsubst | kubectl apply -f -
+
+	kubectl wait --for=condition=Available -n kubernetes-dashboard deployment/kubernetes-dashboard
+
+prometheus:
+	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+	helm repo update
+
+	cat prometheus-values.yaml | helm install ${PROMETHEUS_CHART_VERSION} prometheus-community/kube-prometheus-stack -f -
 
 post-help:
 	echo "\nAdd below line to /etc/host:\n${OAM_IP} ${OAM_DOMAIN}"
