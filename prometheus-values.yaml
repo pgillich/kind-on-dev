@@ -1,3 +1,15 @@
+# Genereated by:
+# helm show values prometheus-community/kube-prometheus-stack > prometheus-values.yaml
+
+####################################################################
+#
+#   SAVE WITHOUT AUTO FORMAT, TO KEEP THE COMMENTED INDENTATION!
+#   One of:
+#      CTRL+k s
+#      CTRL+SHIFT+P File: Save without Formatting
+#
+####################################################################
+
 # Default values for kube-prometheus-stack.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
@@ -8,7 +20,7 @@ nameOverride: ""
 
 ## Override the deployment namespace
 ##
-namespaceOverride: ""
+namespaceOverride: "oam"
 
 ## Provide a k8s version to auto dashboard import script example: kubeTargetVersionOverride: 1.16.6
 ##
@@ -194,24 +206,25 @@ alertmanager:
   #       {{ end }}
 
   ingress:
-    enabled: false
+    enabled: true
 
     # For Kubernetes >= 1.18 you should specify the ingress-controller via the field ingressClassName
     # See https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/#specifying-the-class-of-an-ingress
-    # ingressClassName: nginx
+    ingressClassName: traefik
 
     annotations: {}
+      # traefik.ingress.kubernetes.io/rule-type: PathPrefixStrip
 
     labels: {}
 
     ## Hosts must be provided if Ingress is enabled.
     ##
-    hosts: []
+    hosts: [oam.kind-01.company.com]
       # - alertmanager.domain.com
 
     ## Paths to use for ingress rules - one path should match the alertmanagerSpec.routePrefix
     ##
-    paths: []
+    paths: [/alertmanager]
     # - /
 
     ## TLS configuration for Alertmanager Ingress
@@ -467,7 +480,8 @@ alertmanager:
     ## 	The route prefix Alertmanager registers HTTP handlers for. This is useful, if using ExternalURL and a proxy is rewriting HTTP routes of a request, and the actual ExternalURL is still true,
     ## but the server serves requests under a different route prefix. For example for use with kubectl proxy.
     ##
-    routePrefix: /
+    # routePrefix: /
+    routePrefix: /alertmanager
 
     ## If set to true all actions on the underlying managed objects are not going to be performed, except for delete actions.
     ##
@@ -574,7 +588,7 @@ alertmanager:
 ##
 grafana:
   enabled: true
-  namespaceOverride: ""
+  namespaceOverride: "oam"
 
   ## Deploy default dashboards.
   ##
@@ -585,12 +599,14 @@ grafana:
   ingress:
     ## If true, Grafana Ingress will be created
     ##
-    enabled: false
+    enabled: true
+
+    ingressClassName: traefik
 
     ## Annotations for Grafana Ingress
     ##
-    annotations: {}
-      # kubernetes.io/ingress.class: nginx
+    annotations:
+      traefik.ingress.kubernetes.io/rule-type: PathPrefixStrip
       # kubernetes.io/tls-acme: "true"
 
     ## Labels to be added to the Ingress
@@ -602,10 +618,10 @@ grafana:
     ##
     # hosts:
     #   - grafana.domain.com
-    hosts: []
+    hosts: [oam.kind-01.company.com]
 
     ## Path for grafana ingress
-    path: /
+    path: /grafana
 
     ## TLS configuration for grafana Ingress
     ## Secret must be manually created in the namespace
@@ -614,6 +630,10 @@ grafana:
     # - secretName: grafana-general-tls
     #   hosts:
     #   - grafana.example.com
+
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s/grafana"
 
   sidecar:
     dashboards:
@@ -1166,7 +1186,7 @@ kubeStateMetrics:
 ## Configuration for kube-state-metrics subchart
 ##
 kube-state-metrics:
-  namespaceOverride: ""
+  namespaceOverride: "oam"
   rbac:
     create: true
   podSecurityPolicy:
@@ -1212,7 +1232,7 @@ nodeExporter:
 ## Configuration for prometheus-node-exporter subchart
 ##
 prometheus-node-exporter:
-  namespaceOverride: ""
+  namespaceOverride: "oam"
   podLabels:
     ## Add the 'node-exporter' label to be used by serviceMonitor to match standard common usage in rules and grafana dashboards
     ##
@@ -1550,19 +1570,21 @@ prometheus:
 
     # For Kubernetes >= 1.18 you should specify the ingress-controller via the field ingressClassName
     # See https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/#specifying-the-class-of-an-ingress
-    # ingressClassName: nginx
+    ingressClassName: traefik
 
-    annotations: {}
+    annotations:
+      traefik.ingress.kubernetes.io/rule-type: PathPrefixStrip
+
     labels: {}
     servicePort: 10901
     ## Hosts must be provided if Ingress is enabled.
     ##
-    hosts: []
+    hosts: [oam.kind-01.company.com]
       # - thanos-gateway.domain.com
 
     ## Paths to use for ingress rules
     ##
-    paths: []
+    paths: [/thanos]
     # - /
 
     ## TLS configuration for Thanos Ingress
@@ -1574,13 +1596,15 @@ prometheus:
     #   - thanos-gateway.domain.com
 
   ingress:
-    enabled: false
+    enabled: true
 
     # For Kubernetes >= 1.18 you should specify the ingress-controller via the field ingressClassName
     # See https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/#specifying-the-class-of-an-ingress
-    # ingressClassName: nginx
+    ingressClassName: traefik
 
     annotations: {}
+      # traefik.ingress.kubernetes.io/rule-type: PathPrefixStrip
+
     labels: {}
 
     ## Hostnames.
@@ -1588,11 +1612,11 @@ prometheus:
     ##
     # hosts:
     #   - prometheus.domain.com
-    hosts: []
+    hosts: [oam.kind-01.company.com]
 
     ## Paths to use for ingress rules - one path should match the prometheusSpec.routePrefix
     ##
-    paths: []
+    paths: [/prometheus]
     # - /
 
     ## TLS configuration for Prometheus Ingress
@@ -1803,7 +1827,7 @@ prometheus:
     ## prometheus resource to be created with selectors based on values in the helm deployment,
     ## which will also match the PrometheusRule resources created
     ##
-    ruleSelectorNilUsesHelmValues: true
+    ruleSelectorNilUsesHelmValues: false
 
     ## PrometheusRules to be selected for target discovery.
     ## If {}, select all ServiceMonitors
@@ -1828,7 +1852,7 @@ prometheus:
     ## prometheus resource to be created with selectors based on values in the helm deployment,
     ## which will also match the servicemonitors created
     ##
-    serviceMonitorSelectorNilUsesHelmValues: true
+    serviceMonitorSelectorNilUsesHelmValues: false
 
     ## ServiceMonitors to be selected for target discovery.
     ## If {}, select all ServiceMonitors
@@ -1848,7 +1872,7 @@ prometheus:
     ## prometheus resource to be created with selectors based on values in the helm deployment,
     ## which will also match the podmonitors created
     ##
-    podMonitorSelectorNilUsesHelmValues: true
+    podMonitorSelectorNilUsesHelmValues: false
 
     ## PodMonitors to be selected for target discovery.
     ## If {}, select all PodMonitors
@@ -1868,7 +1892,7 @@ prometheus:
     ## prometheus resource to be created with selectors based on values in the helm deployment,
     ## which will also match the probes created
     ##
-    probeSelectorNilUsesHelmValues: true
+    probeSelectorNilUsesHelmValues: false
 
     ## Probes to be selected for target discovery.
     ## If {}, select all Probes
@@ -1915,7 +1939,7 @@ prometheus:
     ## Prefix used to register routes, overriding externalUrl route.
     ## Useful for proxies that rewrite URLs.
     ##
-    routePrefix: /
+    routePrefix: /prometheus
 
     ## Standard object’s metadata. More info: https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#metadata
     ## Metadata Labels and Annotations gets propagated to the prometheus pods.
