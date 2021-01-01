@@ -8,9 +8,9 @@ The solution is make-based, see more details in `Makefile`.
 
 Run below commands, if something is missing:
 
-* `make docker`
-* `make kubectl`
-* `make kind`
+* `make docker-install`
+* `make kubectl-install`
+* `make kind-install`
 
 ## Configuration
 
@@ -22,6 +22,7 @@ Help for Prometheus configuration:
 
 * <https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack>
 * <https://github.com/prometheus-operator/kube-prometheus>
+* <https://github.com/grafana/helm-charts/blob/main/charts/grafana/values.yaml>
 * <https://docs.flagger.app/tutorials/prometheus-operator>
 * <https://docs.fission.io/docs/observability/prometheus/>
 * <https://medium.com/swlh/free-ssl-certs-with-lets-encrypt-for-grafana-prometheus-operator-helm-charts-b3b629e84ba1>
