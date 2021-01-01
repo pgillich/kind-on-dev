@@ -1,22 +1,31 @@
 # kind-on-dev
 
-This repo helps to setup a KinD cluster from scratch.
+This repo helps to setup a KinD (and Vagrant+kubeadm) cluster from scratch.
 
 The solution is make-based, see more details in `Makefile`.
 
+> Warning: This deployment is not secure and must be hardened before using it in production.
+
 ## Preparation
 
-Run below commands, if something is missing:
+Run below commands, if something is missing or needed:
 
-* `make docker-install`
-* `make kubectl-install`
-* `make kind-install`
+* `make docker-install` (only for KinD)
+* `make kubectl-install` (if not installed yet)
+* `make kind-install` (only for KinD)
+* `make kvm-install` (only for Vagrant + libvirt/KVM)
+* `make vagrant-install` (only for Vagrant, if not installed yet)
+* `DO_VAGRANT_ALIAS=true make vagrant-install` (only for Vagrant, if not installed yet and `vagrant` would be used in CLI)
+
+Note: the Vagrant+kubeadm variant uses own vagrant in Docker, which contains all needed plugins. See more details at [kubeadm-vagrant/Ubuntu/README.md](kubeadm-vagrant/Ubuntu/README.md).
 
 ## Configuration
 
 Review `.env`.
 
 Review `*.yaml` files.
+
+Review `kubeadm-vagrant/Ubuntu/Vagrantfile`, if Vagrant is used. Hint: RAM allocation for VMs is very low!
 
 Help for Prometheus configuration:
 
@@ -34,16 +43,18 @@ Passwords:
 
 ## Setup cluster
 
+> Warning: `~/.kube/config` will be overwritten!
+
 Install:
 
 ```sh
 make all
 ```
 
-Install with Prometheus:
+Install without Prometheus:
 
 ```sh
-make all DO_PROMETHEUS=true
+make all DO_PROMETHEUS=false
 ```
 
 Post-install steps: please follow instructions of `make post-help`. Note: `post-help` target is called at the end of `make all`.
@@ -58,7 +69,9 @@ make destroy
 
 ### Flannel
 
-Flannel cannot be deployed, because a binary is missing on the nodes. See more details:
+Flannel on Vagrant+kubeadm is deployed automatically.
+
+Flannel cannot be deployed on KinD, because a binary is missing on the nodes. See more details:
 
 * <https://medium.com/swlh/customise-your-kind-clusters-networking-layer-1249e7916100>
 * <https://github.com/kubernetes-sigs/kind/issues/1340>

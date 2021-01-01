@@ -1,5 +1,7 @@
 #!/usr/bin/make
 
+vagrant = docker run -it --rm -e LIBVIRT_DEFAULT_URI -v /var/run/libvirt/:/var/run/libvirt/ -v ~/.vagrant.d:/.vagrant.d -v $$(pwd):$$(pwd) -w $$(pwd) --network host pgillich/vagrant-libvirt:latest vagrant
+
 include .env
 
 .SILENT: post-help
@@ -15,6 +17,8 @@ docker-install:
 	sudo apt-get install docker-ce docker-ce-cli containerd.io
 	sudo usermod -aG docker `id -un`
 
+	@tput setaf 3; echo "\nLogout and login to reload group rights!\n"; tput sgr0
+
 kubectl-install:
 	sudo apt-get update && sudo apt-get install -y apt-transport-https gnupg2 curl
 	curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
@@ -22,6 +26,7 @@ kubectl-install:
 	sudo apt-get update
 	sudo apt-get install -y kubectl
 
+	echo >>~/.bashrc
 	echo 'source <(kubectl completion bash)' >>~/.bashrc
 	source <(kubectl completion bash)
 
@@ -30,10 +35,34 @@ kind-install:
 	chmod +x /tmp/kind
 	sudo mv /tmp/kind /usr/local/bin
 
+	echo >>~/.bashrc
 	echo 'source <(kind completion bash)' >>~/.bashrc
 	source <(kind completion bash)
 
-cluster:
+kvm-install:
+	sudo apt-get install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils
+	sudo adduser `id -un` kvm
+	sudo adduser `id -un` libvirtd
+
+	@tput setaf 3; echo "\nLogout and login to reload group rights!\n"; tput sgr0
+
+vagrant-install:
+	git clone https://github.com/pgillich/kubeadm-vagrant.git
+
+	mkdir -p ~/.vagrant.d/boxes
+	mkdir -p ~/.vagrant.d/data
+	mkdir -p ~/.vagrant.d/tmp
+
+ifeq (${DO_VAGRANT_ALIAS}, true)
+	echo >>~/.bashrc
+	echo alias vagrant="'"'${vagrant}'"'" >>~/.bashrc
+
+	@tput setaf 3; echo "\nStart a new shell to reload vagrant alias!\n"; tput sgr0
+endif
+
+cluster: cluster-${K8S_DISTRIBUTION}
+
+cluster-kind:
 	@tput setaf 6; echo "\nmake $@\n"; tput sgr0
 
 	kind create cluster --name ${CLUSTER_NAME} --config=kind-config.yaml --wait=${KIND_WAIT}
@@ -41,14 +70,30 @@ cluster:
 
 	kubectl wait --for=condition=Ready --timeout=${KIND_WAIT} -A pod --all || echo 'TIMEOUT' >&2
 
-flannel:
+cluster-vagrant:
 	@tput setaf 6; echo "\nmake $@\n"; tput sgr0
+
+	echo "SETUP_APPS = false" >kubeadm-vagrant/Ubuntu/.env
+
+	cd kubeadm-vagrant/Ubuntu; $(vagrant) up --no-parallel
+
+	cd kubeadm-vagrant/Ubuntu; $(vagrant) ssh master -- 'cat .kube/config' | grep -v '^Starting with' >~/.kube/config
+
+flannel:
+ifeq (${K8S_DISTRIBUTION}, kind)
+	@tput setaf 6; echo "\nmake $@\n"; tput sgr0
+	@tput setaf 3; echo "SKIPPED (buggy)\n"; tput sgr0
 
 	# https://medium.com/swlh/customise-your-kind-clusters-networking-layer-1249e7916100
 	#curl -sfL https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml > /tmp/kube-flannel.yml
 	#kubectl apply -f /tmp/kube-flannel.yml
 
 	#kubectl scale deployment --replicas 1 coredns --namespace kube-system
+endif
+ifeq (${K8S_DISTRIBUTION}, vagrant)
+	@tput setaf 6; echo "\nmake $@\n"; tput sgr0
+	@tput setaf 3; echo "SKIPPED (already done)\n"; tput sgr0
+endif
 
 metallb:
 	@tput setaf 6; echo "\nmake $@\n"; tput sgr0
@@ -93,7 +138,7 @@ dashboard:
 
 	cat dashboard-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} envsubst | kubectl apply -f -
 
-	kubectl wait --for=condition=Available -n kubernetes-dashboard deployment/kubernetes-dashboard || echo 'TIMEOUT' >&2
+	kubectl wait --for=condition=Available --timeout=${DASHBOARD_WAIT} -n kubernetes-dashboard deployment/kubernetes-dashboard || echo 'TIMEOUT' >&2
 
 prometheus:
 ifeq (${DO_PROMETHEUS}, true)
@@ -142,5 +187,10 @@ post-help:
 
 	echo "\nGrafana URL:\nhttps://${OAM_DOMAIN}/grafana/"
 
-destroy:
+destroy: destroy-${K8S_DISTRIBUTION}
+
+destroy-kind:
 	kind delete cluster --name ${CLUSTER_NAME}
+
+destroy-vagrant:
+	cd kubeadm-vagrant/Ubuntu; $(vagrant) destroy
