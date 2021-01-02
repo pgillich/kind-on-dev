@@ -28,7 +28,8 @@ kubectl-install:
 
 	echo >>~/.bashrc
 	echo 'source <(kubectl completion bash)' >>~/.bashrc
-	source <(kubectl completion bash)
+
+	@tput setaf 3; echo "\nStart a new shell to load kubectl completion!\n"; tput sgr0
 
 k3s-install: destroy-k3s
 
@@ -39,7 +40,8 @@ kind-install:
 
 	echo >>~/.bashrc
 	echo 'source <(kind completion bash)' >>~/.bashrc
-	source <(kind completion bash)
+
+	@tput setaf 3; echo "\nStart a new shell to load kind completion!\n"; tput sgr0
 
 kvm-install:
 	sudo apt-get install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils

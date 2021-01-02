@@ -2,7 +2,7 @@
 
 This repo helps to setup a KinD (and Vagrant+kubeadm) cluster from scratch.
 
-The solution is make-based, see more details in `Makefile`.
+The solution is make-based, see more details in `Makefile` and `.env`.
 
 > Warning: This deployment is not secure and must be hardened before using it in production.
 
@@ -10,8 +10,8 @@ The solution is make-based, see more details in `Makefile`.
 
 Run below commands, if something is missing or needed:
 
-* `make docker-install` (only for KinD)
 * `make kubectl-install` (if not installed yet)
+* `make docker-install` (only for KinD)
 * `make kind-install` (only for KinD)
 * `make kvm-install` (only for Vagrant + libvirt/KVM)
 * `make vagrant-install` (only for Vagrant, if not installed yet)
@@ -60,6 +60,8 @@ make all DO_PROMETHEUS=false
 Post-install steps: please follow instructions of `make post-help`. Note: `post-help` target is called at the end of `make all`.
 
 ## Destroy cluster
+
+> Warning: if the selected K8s distribution is K3s, it will be uninstalled!
 
 ```sh
 make destroy
