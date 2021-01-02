@@ -74,7 +74,8 @@ cluster: cluster-${K8S_DISTRIBUTION}
 cluster-k3s:
 	@tput setaf 6; echo "\nmake $@\n"; tput sgr0
 
-	curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=${K3S_VERSION} INSTALL_K3S_SYMLINK=skip sh -s - --write-kubeconfig-mode 644 --https-listen-port 6443
+	curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=${K3S_VERSION} INSTALL_K3S_SYMLINK=skip sh -s - --write-kubeconfig-mode 644 --https-listen-port ${K3S_SERVER_PORT}
+	cp /etc/rancher/k3s/k3s.yaml ~/.kube/${K8S_DISTRIBUTION}.yaml
 	cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
 
 	sleep 5
