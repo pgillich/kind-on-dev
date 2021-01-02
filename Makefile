@@ -30,6 +30,8 @@ kubectl-install:
 	echo 'source <(kubectl completion bash)' >>~/.bashrc
 	source <(kubectl completion bash)
 
+k3s-install: destroy-k3s
+
 kind-install:
 	curl -Lo /tmp/kind https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64
 	chmod +x /tmp/kind
@@ -41,6 +43,7 @@ kind-install:
 
 kvm-install:
 	sudo apt-get install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils
+	sudo apt-get install virt-manager
 	sudo adduser `id -un` kvm
 	sudo adduser `id -un` libvirtd
 
@@ -62,11 +65,21 @@ endif
 
 cluster: cluster-${K8S_DISTRIBUTION}
 
+cluster-k3s:
+	@tput setaf 6; echo "\nmake $@\n"; tput sgr0
+
+	curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=${K3S_VERSION} INSTALL_K3S_SYMLINK=skip sh -s - --write-kubeconfig-mode 644
+	cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+
+	sleep 5
+	kubectl wait --for=condition=Ready --timeout=${K3S_WAIT} -A pod --all || echo 'TIMEOUT' >&2
+
 cluster-kind:
 	@tput setaf 6; echo "\nmake $@\n"; tput sgr0
 
 	kind create cluster --name ${CLUSTER_NAME} --config=kind-config.yaml --wait=${KIND_WAIT}
 	kubectl cluster-info --context kind-${CLUSTER_NAME}
+	cp ~/.kube/config ~/.kube/${K8S_DISTRIBUTION}.yaml
 
 	kubectl wait --for=condition=Ready --timeout=${KIND_WAIT} -A pod --all || echo 'TIMEOUT' >&2
 
@@ -77,11 +90,19 @@ cluster-vagrant:
 
 	cd kubeadm-vagrant/Ubuntu; $(vagrant) up --no-parallel
 
-	cd kubeadm-vagrant/Ubuntu; $(vagrant) ssh master -- 'cat .kube/config' | grep -v '^Starting with' >~/.kube/config
+	cd kubeadm-vagrant/Ubuntu; $(vagrant) ssh master -- 'cat .kube/config' | grep -v '^Starting with' >~/.kube/${K8S_DISTRIBUTION}.yaml
+	cp ~/.kube/${K8S_DISTRIBUTION}.yaml ~/.kube/config
 
-flannel:
-ifeq (${K8S_DISTRIBUTION}, kind)
+flannel: flannel-${K8S_DISTRIBUTION}
+
+flannel-k3s:
 	@tput setaf 6; echo "\nmake $@\n"; tput sgr0
+
+	@tput setaf 3; echo "SKIPPED (already done by k3s)\n"; tput sgr0
+
+flannel-kind:
+	@tput setaf 6; echo "\nmake $@\n"; tput sgr0
+
 	@tput setaf 3; echo "SKIPPED (buggy)\n"; tput sgr0
 
 	# https://medium.com/swlh/customise-your-kind-clusters-networking-layer-1249e7916100
@@ -89,15 +110,19 @@ ifeq (${K8S_DISTRIBUTION}, kind)
 	#kubectl apply -f /tmp/kube-flannel.yml
 
 	#kubectl scale deployment --replicas 1 coredns --namespace kube-system
-endif
-ifeq (${K8S_DISTRIBUTION}, vagrant)
+
+flannel-vagrant:
 	@tput setaf 6; echo "\nmake $@\n"; tput sgr0
-	@tput setaf 3; echo "SKIPPED (already done)\n"; tput sgr0
-endif
+
+	@tput setaf 3; echo "SKIPPED (already done by vagrant)\n"; tput sgr0
 
 metallb:
 	@tput setaf 6; echo "\nmake $@\n"; tput sgr0
 
+ifeq (${K8S_DISTRIBUTION}, k3s)
+	@tput setaf 3; echo "SKIPPED (on K3s)\n"; tput sgr0
+
+else
 	kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/manifests/namespace.yaml
 	kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/manifests/metallb.yaml
 	kubectl create secret generic -n metallb-system memberlist --from-literal=secretkey="$(openssl rand -base64 128)"
@@ -105,6 +130,7 @@ metallb:
 	cat metallb-config.yaml | METALLB_POOL=${METALLB_POOL} envsubst | kubectl apply -f -
 
 	kubectl wait --for=condition=Ready --timeout=${METALLB_WAIT} -n metallb-system pod --all || echo 'TIMEOUT' >&2
+endif
 
 helm:
 	@tput setaf 6; echo "\nmake $@\n"; tput sgr0
@@ -118,18 +144,26 @@ metrics:
 ifeq (${DO_METRICS}, true)
 	@tput setaf 6; echo "\nmake $@\n"; tput sgr0
 
+ifeq (${K8S_DISTRIBUTION}, k3s)
+	@tput setaf 3; echo "SKIPPED (already done by K3s)\n"; tput sgr0
+else
 	helm install metrics-server stable/metrics-server --version ${METRICS_VERSION} --set 'args={--kubelet-insecure-tls, --kubelet-preferred-address-types=InternalIP}' --namespace kube-system
 
 	kubectl wait --for=condition=Available --timeout=${METRICS_WAIT} -n kube-system  deployment.apps/metrics-server || echo 'TIMEOUT' >&2
+endif
 
 endif
 
 traefik:
 	@tput setaf 6; echo "\nmake $@\n"; tput sgr0
 
+ifeq (${K8S_DISTRIBUTION}, k3s)
+	sudo sed -i -e '/    rbac:/i\' -e "    dashboard:\n      enabled: true\n      domain:  ${OAM_DOMAIN}" /var/lib/rancher/k3s/server/manifests/traefik.yaml
+else
 	cat traefik-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} OAM_IP=${OAM_IP} envsubst | helm install traefik stable/traefik --version 1.81.0 --namespace kube-system -f -
 
 	kubectl wait --for=condition=Available --timeout=${TRAEFIK_WAIT} -n kube-system  deployment.apps/traefik || echo 'TIMEOUT' >&2
+endif
 
 dashboard:
 	@tput setaf 6; echo "\nmake $@\n"; tput sgr0
@@ -172,14 +206,16 @@ endif
 post-help:
 	@tput setaf 6; echo "\nmake $@\n"; tput sgr0
 
-	echo "Add below line to /etc/host:\n${OAM_IP} ${OAM_DOMAIN}"
+	echo "Using custom kubectl config file:\nKUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl ..."
+
+	echo "\nAdd below line to /etc/host:\n${OAM_IP} ${OAM_DOMAIN}"
 
 	echo "\nTraefik URL:\nhttp://${OAM_DOMAIN}/dashboard/"
 
 	echo "\nDashboard URL:\nhttps://${OAM_DOMAIN}/kubernetes/"
 
 	echo "\nDashboard login token:"
-	kubectl -n kubernetes-dashboard describe secret admin-user-token | grep ^token
+	kubectl -n kubernetes-dashboard describe secret admin-user-token | grep ^token || echo "DASHBOARD IS NOT READY!"
 
 	echo "\nPrometheus URL:\nhttps://${OAM_DOMAIN}/prometheus/"
 
@@ -188,6 +224,10 @@ post-help:
 	echo "\nGrafana URL:\nhttps://${OAM_DOMAIN}/grafana/"
 
 destroy: destroy-${K8S_DISTRIBUTION}
+
+destroy-k3s:
+	/usr/local/bin/k3s-uninstall.sh || echo "ALREADY UNINSTALLED"
+	sudo rm -rf /var/lib/rancher/k3s/ /etc/rancher/k3s
 
 destroy-kind:
 	kind delete cluster --name ${CLUSTER_NAME}
