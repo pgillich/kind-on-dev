@@ -17,6 +17,9 @@ docker-install:
 	sudo apt-get install docker-ce docker-ce-cli containerd.io
 	sudo usermod -aG docker `id -un`
 
+	sudo cp docker-daemon.json /etc/docker/daemon.json
+	sudo systemctl restart docker
+
 	@tput setaf 3; echo "\nLogout and login to reload group rights!\n"; tput sgr0
 
 kubectl-install:
@@ -52,7 +55,7 @@ kvm-install:
 	@tput setaf 3; echo "\nLogout and login to reload group rights!\n"; tput sgr0
 
 vagrant-install:
-	git clone https://github.com/pgillich/kubeadm-vagrant.git
+	git clone https://github.com/pgillich/kubeadm-vagrant.git || cd kubeadm-vagrant; git pull
 
 	mkdir -p ~/.vagrant.d/boxes
 	mkdir -p ~/.vagrant.d/data
@@ -70,7 +73,7 @@ cluster: cluster-${K8S_DISTRIBUTION}
 cluster-k3s:
 	@tput setaf 6; echo "\nmake $@\n"; tput sgr0
 
-	curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=${K3S_VERSION} INSTALL_K3S_SYMLINK=skip sh -s - --write-kubeconfig-mode 644
+	curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=${K3S_VERSION} INSTALL_K3S_SYMLINK=skip sh -s - --write-kubeconfig-mode 644 --https-listen-port 6443
 	cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
 
 	sleep 5
