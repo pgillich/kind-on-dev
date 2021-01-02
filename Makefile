@@ -18,6 +18,7 @@ docker-install:
 	sudo usermod -aG docker `id -un`
 
 	sudo cp docker-daemon.json /etc/docker/daemon.json
+	sudo systemctl daemon-reload
 	sudo systemctl restart docker
 
 	@tput setaf 3; echo "\nLogout and login to reload group rights!\n"; tput sgr0
