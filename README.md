@@ -1,6 +1,6 @@
 # kind-on-dev
 
-This repo helps to setup a KinD (and Vagrant+kubeadm) cluster from scratch. Usage is published at [Environment for comparing several on-premise Kubernetes distributions (K3s, KinD, kubeadm)](https://pgillich.medium.com/environment-for-comparing-several-on-premise-kubernetes-distributions-k3s-kind-kubeadm-a53675a80a00).
+This repo helps to setup a KinD (and K3s, Vagrant+kubeadm) cluster from scratch. Usage is published at [Environment for comparing several on-premise Kubernetes distributions (K3s, KinD, kubeadm)](https://pgillich.medium.com/environment-for-comparing-several-on-premise-kubernetes-distributions-k3s-kind-kubeadm-a53675a80a00).
 
 The solution is make-based, see more details in `Makefile` and `.env`.
 
