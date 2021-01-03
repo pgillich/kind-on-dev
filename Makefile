@@ -1,6 +1,12 @@
 #!/usr/bin/make
 
+UNAME := $(shell uname)
+
+ifeq ($(UNAME), Linux)
 vagrant = docker run -it --rm -e LIBVIRT_DEFAULT_URI -v /var/run/libvirt/:/var/run/libvirt/ -v ~/.vagrant.d:/.vagrant.d -v $$(pwd):$$(pwd) -w $$(pwd) --network host pgillich/vagrant-libvirt:latest vagrant
+else
+vagrant = PATH=$$(cygpath "$$WINDIR/System32/OpenSSH"):$$PATH vagrant
+endif
 
 include .env
 
@@ -142,7 +148,13 @@ endif
 helm:
 	@tput setaf 6; echo "\nmake $@\n"; tput sgr0
 
+ifeq ($(UNAME), Linux)
 	curl -sfL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+else
+	curl -sfL https://get.helm.sh/helm-${HELM_VERSION}-windows-amd64.zip -o /tmp/helm.zip
+	unzip -o /tmp/helm.zip -d /tmp
+	cp /tmp/windows-amd64/helm.exe /bin
+endif
 
 	helm repo add stable https://charts.helm.sh/stable
 	helm repo update

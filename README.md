@@ -4,20 +4,29 @@ This repo helps to setup a KinD (and Vagrant+kubeadm) cluster from scratch.
 
 The solution is make-based, see more details in `Makefile` and `.env`.
 
+On Windows, only Vagrant+kubeadm variant is supported with limitaitons.
+
 > Warning: This deployment is not secure and must be hardened before using it in production.
 
 ## Preparation
 
-Run below commands, if something is missing or needed:
+On Ununtu, run below commands, if something is missing or needed:
 
 * `make kubectl-install` (if not installed yet)
 * `make docker-install` (only for KinD)
 * `make kind-install` (only for KinD)
 * `make kvm-install` (only for Vagrant + libvirt/KVM)
-* `make vagrant-install` (only for Vagrant, if not installed yet)
+* `make vagrant-install` (only for Vagrant, needed)
 * `DO_VAGRANT_ALIAS=true make vagrant-install` (only for Vagrant, if not installed yet and `vagrant` would be used in CLI)
 
-Note: the Vagrant+kubeadm variant uses own vagrant in Docker, which contains all needed plugins. See more details at [kubeadm-vagrant/Ubuntu/README.md](kubeadm-vagrant/Ubuntu/README.md).
+> Note: the Vagrant+kubeadm variant uses own vagrant in Docker, which contains all needed plugins. See more details at [kubeadm-vagrant/Ubuntu/README.md](kubeadm-vagrant/Ubuntu/README.md).
+
+On Windows, do below steps:
+
+1. Install official Vagrant and needed plugins (mutate and hostmanager), if not installed yet.
+1. Install kubeclt, if not installed yet.
+1. Install a Cygwin distribution, which has `make` or it can be installed (for example: MobaXterm)
+1. run `make vagrant-install`
 
 ## Configuration
 
