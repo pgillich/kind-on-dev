@@ -24,8 +24,8 @@ On Ununtu, run below commands, if something is missing or needed:
 On Windows, do below steps:
 
 1. Install official Vagrant and needed plugins (mutate and hostmanager), if not installed yet.
-1. Install kubeclt, if not installed yet.
-1. Install a Cygwin distribution, which has `make` or it can be installed (for example: MobaXterm)
+1. Install kubectl, if not installed yet.
+1. Install a Cygwin distribution, which has `make` or it can be installed (for example on MobaXterm: `apt-get install make`)
 1. run `make vagrant-install`
 
 ## Configuration
