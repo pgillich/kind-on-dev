@@ -1,5 +1,7 @@
 #!/usr/bin/make
 
+SHELL := dash
+
 UNAME := $(shell uname)
 
 ifeq ($(UNAME), Linux)
