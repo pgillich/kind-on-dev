@@ -68,6 +68,26 @@ make all DO_PROMETHEUS=false
 
 Post-install steps: please follow instructions of `make post-help`. Note: `post-help` target is called at the end of `make all`.
 
+## Optional components
+
+### Monitoring
+
+Metrics server and Prometheus deployment can de disabled by `DO_...` flags in `.env` file.
+
+### Storage
+
+Nfs storage can be deployed by `make nfs`. It can be configured in `nfs-values.yaml`.
+
+> Warning! It's experimental.
+
+Example for using NFS:
+
+```sh
+kubectl apply -f pvc-example.yaml
+```
+
+Note: the default storage in KinD is <https://github.com/rancher/local-path-provisioner>.
+
 ## Destroy cluster
 
 > Warning: if the selected K8s distribution is K3s, it will be uninstalled!

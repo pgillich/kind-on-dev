@@ -1,0 +1,13 @@
+# Nfs-provisioner params for Helm install
+#
+# For more details and possible options please see the table at:
+#  - <https://github.com/helm/charts/tree/master/stable/nfs-server-provisioner>
+#  - <https://docs.bitnami.com/tutorials/deploy-applications-nfs-kubernetes/>
+#  - <https://www.padok.fr/en/blog/readwritemany-nfs-kubernetes>
+#  - <https://discuss.kubernetes.io/t/in-cluster-nfs-servers/7553>
+#  - <https://www.nnmutong.com/home/tarticle_item?id=1189>
+
+persistence:
+  enabled: true
+  size: 1Gi
+  accessMode: ReadWriteOnce

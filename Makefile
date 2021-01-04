@@ -178,6 +178,14 @@ endif
 	helm repo add stable https://charts.helm.sh/stable
 	helm repo update
 
+.PHONY: nfs
+nfs:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	cat nfs-values.yaml | helm install nfs-provisioner stable/nfs-server-provisioner -f -
+
+	kubectl wait -l app=nfs-server-provisioner --for=condition=ready --timeout=${NFS_WAIT} pod
+
 .PHONY: metrics
 metrics:
 ifeq (${DO_METRICS}, true)
@@ -188,7 +196,7 @@ ifeq (${K8S_DISTRIBUTION}, k3s)
 else
 	helm install metrics-server stable/metrics-server --version ${METRICS_VERSION} --set 'args={--kubelet-insecure-tls, --kubelet-preferred-address-types=InternalIP}' --namespace kube-system
 
-	kubectl wait --for=condition=Available --timeout=${METRICS_WAIT} -n kube-system  deployment.apps/metrics-server || echo 'TIMEOUT' >&2
+	kubectl wait --for=condition=Available --timeout=${METRICS_WAIT} -n kube-system deployment/metrics-server || echo 'TIMEOUT' >&2
 endif
 
 endif
@@ -202,7 +210,7 @@ ifeq (${K8S_DISTRIBUTION}, k3s)
 else
 	cat traefik-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} OAM_IP=${OAM_IP} envsubst | helm install traefik stable/traefik --version 1.81.0 --namespace kube-system -f -
 
-	kubectl wait --for=condition=Available --timeout=${TRAEFIK_WAIT} -n kube-system  deployment.apps/traefik || echo 'TIMEOUT' >&2
+	kubectl wait --for=condition=Available --timeout=${TRAEFIK_WAIT} -n kube-system  deployment/traefik || echo 'TIMEOUT' >&2
 endif
 
 .PHONY: dashboard
