@@ -12,12 +12,12 @@ On Windows, only Vagrant+kubeadm variant is supported with limitaitons.
 
 On Ununtu, run below commands, if something is missing or needed:
 
-* `make kubectl-install` (if not installed yet)
-* `make docker-install` (only for KinD)
-* `make kind-install` (only for KinD)
-* `make kvm-install` (only for Vagrant + libvirt/KVM)
-* `make vagrant-install` (only for Vagrant, needed)
-* `DO_VAGRANT_ALIAS=true make vagrant-install` (only for Vagrant, if not installed yet and `vagrant` would be used in CLI)
+* `make install-kubectl` (if not installed yet)
+* `make install-docker` (only for KinD)
+* `make install-kind` (only for KinD)
+* `make install-kvm` (only for Vagrant + libvirt/KVM)
+* `make generate-vagrant` (only for Vagrant, needed)
+* `DO_VAGRANT_ALIAS=true make install-vagrant` (only for Vagrant, if not installed yet and `vagrant` would be used in CLI)
 
 > Note: the Vagrant+kubeadm variant uses own vagrant in Docker, which contains all needed plugins. See more details at [kubeadm-vagrant/Ubuntu/README.md](kubeadm-vagrant/Ubuntu/README.md).
 
@@ -26,7 +26,7 @@ On Windows, do below steps:
 1. Install official Vagrant and needed plugins (mutate and hostmanager), if not installed yet.
 1. Install kubectl, if not installed yet.
 1. Install a Cygwin distribution, which has `dash` and `make` or it can be installed (for example on MobaXterm: `apt-get install dash make`)
-1. run `make vagrant-install`
+1. run `make generate-vagrant`
 
 ## Configuration
 
@@ -66,7 +66,7 @@ Install without Prometheus:
 make all DO_PROMETHEUS=false
 ```
 
-Post-install steps: please follow instructions of `make post-help`. Note: `post-help` target is called at the end of `make all`.
+Post-install steps: please follow instructions of `make info-post`. Note: `info-post` target is called at the end of `make all`.
 
 ## Optional components
 

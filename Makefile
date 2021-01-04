@@ -5,20 +5,22 @@ SHELL := bash
 UNAME := $(shell uname)
 
 ifeq ($(UNAME), Linux)
-vagrant = docker run -it --rm -e LIBVIRT_DEFAULT_URI -v /var/run/libvirt/:/var/run/libvirt/ -v ~/.vagrant.d:/.vagrant.d -v $$(pwd):$$(pwd) -w $$(pwd) --network host pgillich/vagrant-libvirt:latest vagrant
+vagrant = docker run -it --rm -e LIBVIRT_DEFAULT_URI -v /var/run/libvirt/:/var/run/libvirt/ \
+	-v ~/.vagrant.d:/.vagrant.d -v $$(pwd):$$(pwd) -w $$(pwd) --network host pgillich/vagrant-libvirt:latest \
+	vagrant
 else
 vagrant = PATH=$$(cygpath "$$WINDIR/System32/OpenSSH"):$$PATH vagrant
 endif
 
 include .env
 
-.SILENT: post-help
+.SILENT: info-post
 
 .PHONY: all
-all: cluster flannel metallb helm metrics traefik dashboard prometheus post-help
+all: cluster flannel metallb helm metrics traefik dashboard prometheus info-post
 
-.PHONY: docker-install
-docker-install:
+.PHONY: install-docker
+install-docker:
 	sudo apt-get update
 	sudo apt-get install apt-transport-https ca-certificates curl gnupg-agent software-properties-common
 	curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
@@ -33,8 +35,8 @@ docker-install:
 
 	@tput setaf 3; echo -e "\nLogout and login to reload group rights!\n"; tput sgr0
 
-.PHONY: kubectl-install
-kubectl-install:
+.PHONY: install-kubectl
+install-kubectl:
 	sudo apt-get update && sudo apt-get install -y apt-transport-https gnupg2 curl
 	curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
 	echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee -a /etc/apt/sources.list.d/kubernetes.list
@@ -46,11 +48,11 @@ kubectl-install:
 
 	@tput setaf 3; echo -e "\nStart a new shell to load kubectl completion!\n"; tput sgr0
 
-.PHONY: k3s-install
-k3s-install: destroy-k3s
+.PHONY: install-k3s
+install-k3s: destroy-k3s
 
-.PHONY: kind-install
-kind-install:
+.PHONY: install-kind
+install-kind:
 	curl -Lo /tmp/kind https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64
 	chmod +x /tmp/kind
 	sudo mv /tmp/kind /usr/local/bin
@@ -60,8 +62,8 @@ kind-install:
 
 	@tput setaf 3; echo -e "\nStart a new shell to load kind completion!\n"; tput sgr0
 
-.PHONY: kvm-install
-kvm-install:
+.PHONY: install-kvm
+install-kvm:
 	sudo apt-get install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils
 	sudo apt-get install virt-manager
 	sudo adduser `id -un` kvm
@@ -69,14 +71,16 @@ kvm-install:
 
 	@tput setaf 3; echo -e "\nLogout and login to reload group rights!\n"; tput sgr0
 
-.PHONY: vagrant-install
-vagrant-install:
+.PHONY: generate-vagrant
+generate-vagrant:
 	git clone https://github.com/pgillich/kubeadm-vagrant.git || cd kubeadm-vagrant; git pull
 
 	mkdir -p ~/.vagrant.d/boxes
 	mkdir -p ~/.vagrant.d/data
 	mkdir -p ~/.vagrant.d/tmp
 
+.PHONY: install-vagrant
+install-vagrant:
 ifeq (${DO_VAGRANT_ALIAS}, true)
 	echo >>~/.bashrc
 	echo alias vagrant="'"'${vagrant}'"'" >>~/.bashrc
@@ -91,7 +95,8 @@ cluster: cluster-${K8S_DISTRIBUTION}
 cluster-k3s:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
-	curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=${K3S_VERSION} INSTALL_K3S_SYMLINK=skip sh -s - --write-kubeconfig-mode 644 --https-listen-port ${K3S_SERVER_PORT}
+	curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=${K3S_VERSION} INSTALL_K3S_SYMLINK=skip sh -s - \
+		--write-kubeconfig-mode 644 --https-listen-port ${K3S_SERVER_PORT}
 	cp /etc/rancher/k3s/k3s.yaml ~/.kube/${K8S_DISTRIBUTION}.yaml
 	cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
 
@@ -116,7 +121,8 @@ cluster-vagrant:
 
 	cd kubeadm-vagrant/Ubuntu; $(vagrant) up --no-parallel
 
-	cd kubeadm-vagrant/Ubuntu; $(vagrant) ssh master -- 'cat .kube/config' | grep -v '^Starting with' >~/.kube/${K8S_DISTRIBUTION}.yaml
+	cd kubeadm-vagrant/Ubuntu; $(vagrant) ssh master -- 'cat .kube/config' \
+		| grep -v '^Starting with' >~/.kube/${K8S_DISTRIBUTION}.yaml
 	cp ~/.kube/${K8S_DISTRIBUTION}.yaml ~/.kube/config
 
 .PHONY: flannel
@@ -194,9 +200,11 @@ ifeq (${DO_METRICS}, true)
 ifeq (${K8S_DISTRIBUTION}, k3s)
 	@tput setaf 3; echo -e "SKIPPED (already done by K3s)\n"; tput sgr0
 else
-	helm install metrics-server stable/metrics-server --version ${METRICS_VERSION} --set 'args={--kubelet-insecure-tls, --kubelet-preferred-address-types=InternalIP}' --namespace kube-system
+	helm install metrics-server stable/metrics-server --version ${METRICS_VERSION} \
+		--set 'args={--kubelet-insecure-tls, --kubelet-preferred-address-types=InternalIP}' --namespace kube-system
 
-	kubectl wait --for=condition=Available --timeout=${METRICS_WAIT} -n kube-system deployment/metrics-server || echo 'TIMEOUT' >&2
+	kubectl wait --for=condition=Available --timeout=${METRICS_WAIT} -n kube-system  deployment.apps/metrics-server \
+		|| echo 'TIMEOUT' >&2
 endif
 
 endif
@@ -206,11 +214,14 @@ traefik:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 ifeq (${K8S_DISTRIBUTION}, k3s)
-	sudo sed -i -e '/    rbac:/i\' -e "    dashboard:\n      enabled: true\n      domain:  ${OAM_DOMAIN}" /var/lib/rancher/k3s/server/manifests/traefik.yaml
+	sudo sed -i -e '/    rbac:/i\' -e "    dashboard:\n      enabled: true\n      domain:  ${OAM_DOMAIN}" \
+		/var/lib/rancher/k3s/server/manifests/traefik.yaml
 else
-	cat traefik-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} OAM_IP=${OAM_IP} envsubst | helm install traefik stable/traefik --version 1.81.0 --namespace kube-system -f -
+	cat traefik-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} OAM_IP=${OAM_IP} envsubst \
+		| helm install traefik stable/traefik --version 1.81.0 --namespace kube-system -f -
 
-	kubectl wait --for=condition=Available --timeout=${TRAEFIK_WAIT} -n kube-system  deployment/traefik || echo 'TIMEOUT' >&2
+	kubectl wait --for=condition=Available --timeout=${TRAEFIK_WAIT} -n kube-system deployment.apps/traefik \
+		|| echo 'TIMEOUT' >&2
 endif
 
 .PHONY: dashboard
@@ -221,7 +232,8 @@ dashboard:
 
 	cat dashboard-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} envsubst | kubectl apply -f -
 
-	kubectl wait --for=condition=Available --timeout=${DASHBOARD_WAIT} -n kubernetes-dashboard deployment/kubernetes-dashboard || echo 'TIMEOUT' >&2
+	kubectl wait --for=condition=Available --timeout=${DASHBOARD_WAIT} -n kubernetes-dashboard \
+		deployment/kubernetes-dashboard || echo 'TIMEOUT' >&2
 
 .PHONY: prometheus
 prometheus:
@@ -233,9 +245,12 @@ ifeq (${DO_PROMETHEUS}, true)
 	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 	helm repo update
 
-	cat prometheus-values.yaml | OAM_DOMAIN=${OAM_DOMAIN} envsubst | helm install ${PROMETHEUS_HELM_RELEASE_NAME} prometheus-community/kube-prometheus-stack -n ${PROMETHEUS_NAMESPACE} --version ${PROMETHEUS_CHART_VERSION} -f -
+	cat prometheus-values.yaml | OAM_DOMAIN=${OAM_DOMAIN} envsubst \
+		| helm install ${PROMETHEUS_HELM_RELEASE_NAME} prometheus-community/kube-prometheus-stack \
+		-n ${PROMETHEUS_NAMESPACE} --version ${PROMETHEUS_CHART_VERSION} -f -
 
-	kubectl wait --for=condition=Ready --timeout=${PROMETHEUS_WAIT} -n ${PROMETHEUS_NAMESPACE} pod --all || echo 'TIMEOUT' >&2
+	kubectl wait --for=condition=Ready --timeout=${PROMETHEUS_WAIT} -n ${PROMETHEUS_NAMESPACE} pod --all \
+		|| echo 'TIMEOUT' >&2
 endif
 
 .PHONY: prometheus-cleanup
@@ -253,8 +268,8 @@ ifeq (${DO_PROMETHEUS}, true)
 	kubectl delete crd thanosrulers.monitoring.coreos.com
 endif
 
-.PHONY: post-help
-post-help:
+.PHONY: info-post
+info-post:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	echo -e "Using custom kubectl config file:\nKUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl ..."
