@@ -190,7 +190,7 @@ nfs:
 
 	cat nfs-values.yaml | helm install nfs-provisioner stable/nfs-server-provisioner -f -
 
-	kubectl wait -l app=nfs-server-provisioner --for=condition=ready --timeout=${NFS_WAIT} pod
+	kubectl wait -l app=nfs-server-provisioner --for=condition=ready --timeout=${NFS_WAIT} pod || echo 'TIMEOUT' >&2
 
 .PHONY: metrics
 metrics:

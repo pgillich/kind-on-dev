@@ -1,6 +1,7 @@
 # kind-on-dev
 
-This repo helps to setup a KinD (and K3s, Vagrant+kubeadm) cluster from scratch. Usage is published at [Environment for comparing several on-premise Kubernetes distributions (K3s, KinD, kubeadm)](https://pgillich.medium.com/environment-for-comparing-several-on-premise-kubernetes-distributions-k3s-kind-kubeadm-a53675a80a00).
+This repo helps to setup a KinD (and K3s, Vagrant+kubeadm) cluster from scratch.
+Usage is published at [Environment for comparing several on-premise Kubernetes distributions (K3s, KinD, kubeadm)](https://pgillich.medium.com/environment-for-comparing-several-on-premise-kubernetes-distributions-k3s-kind-kubeadm-a53675a80a00).
 
 The solution is make-based, see more details in `Makefile` and `.env`.
 
@@ -19,7 +20,8 @@ On Ununtu, run below commands, if something is missing or needed:
 * `make generate-vagrant` (only for Vagrant, needed)
 * `DO_VAGRANT_ALIAS=true make install-vagrant` (only for Vagrant, if not installed yet and `vagrant` would be used in CLI)
 
-> Note: the Vagrant+kubeadm variant uses own vagrant in Docker, which contains all needed plugins. See more details at [kubeadm-vagrant/Ubuntu/README.md](kubeadm-vagrant/Ubuntu/README.md).
+> Note: the Vagrant+kubeadm variant uses own vagrant in Docker, which contains all needed plugins.
+> See more details at [kubeadm-vagrant/Ubuntu/README.md](kubeadm-vagrant/Ubuntu/README.md).
 
 On Windows, do below steps:
 
@@ -76,6 +78,12 @@ Metrics server and Prometheus deployment can de disabled by `DO_...` flags in `.
 
 ### Storage
 
+Before using NFS in K3s, `nfs-common` package must be installed, for example:
+
+```sh
+sudo apt install nfs-common
+```
+
 Nfs storage can be deployed by `make nfs`. It can be configured in `nfs-values.yaml`.
 
 > Warning! It's experimental.
@@ -84,9 +92,14 @@ Example for using NFS:
 
 ```sh
 kubectl apply -f pvc-example.yaml
+
+kubectl get pod -l app=busybox-with-pv -o wide --show-labels
+
+for pod in $(kubectl get pod -l app=busybox-with-pv -o name); do echo -e "\n$pod /mnt"; kubectl exec -ti $pod -- find /mnt -type f -exec cat '{}' ';' ; done
 ```
 
-Note: the default storage in KinD is <https://github.com/rancher/local-path-provisioner>.
+Note: the default storage in K3s and KinD is <https://github.com/rancher/local-path-provisioner>,
+which is used by the deployed NFS server.
 
 ## Destroy cluster
 
