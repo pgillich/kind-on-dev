@@ -98,7 +98,7 @@ kubectl get pod -l app=busybox-with-pv -o wide --show-labels
 for pod in $(kubectl get pod -l app=busybox-with-pv -o name); do echo -e "\n$pod /mnt"; kubectl exec -ti $pod -- find /mnt -type f -exec cat '{}' ';' ; done
 ```
 
-Note: the default storage in K3s and KinD is <https://github.com/rancher/local-path-provisioner>,
+Note: the default storage is <https://github.com/rancher/local-path-provisioner>,
 which is used by the deployed NFS server.
 
 ## Destroy cluster

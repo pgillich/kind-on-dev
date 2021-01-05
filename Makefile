@@ -100,8 +100,9 @@ cluster-k3s:
 	cp /etc/rancher/k3s/k3s.yaml ~/.kube/${K8S_DISTRIBUTION}.yaml
 	cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
 
-	sleep 5
-	kubectl wait --for=condition=Ready --timeout=${K3S_WAIT} -A pod --all || echo 'TIMEOUT' >&2
+	while [ $$(KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl get -A pod -o name | wc -l) -eq 0 ]; do sleep 1; done
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${K3S_WAIT} -A pod --all \
+		|| echo 'TIMEOUT' >&2
 
 .PHONY: cluster-kind
 cluster-kind:
@@ -111,7 +112,8 @@ cluster-kind:
 	kubectl cluster-info --context kind-${CLUSTER_NAME}
 	cp ~/.kube/config ~/.kube/${K8S_DISTRIBUTION}.yaml
 
-	kubectl wait --for=condition=Ready --timeout=${KIND_WAIT} -A pod --all || echo 'TIMEOUT' >&2
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${KIND_WAIT} -A pod --all \
+		|| echo 'TIMEOUT' >&2
 
 .PHONY: cluster-vagrant
 cluster-vagrant:
@@ -142,9 +144,9 @@ flannel-kind:
 
 	# https://medium.com/swlh/customise-your-kind-clusters-networking-layer-1249e7916100
 	#curl -sfL https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml > /tmp/kube-flannel.yml
-	#kubectl apply -f /tmp/kube-flannel.yml
+	#KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f /tmp/kube-flannel.yml
 
-	#kubectl scale deployment --replicas 1 coredns --namespace kube-system
+	#KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl scale deployment --replicas 1 coredns --namespace kube-system
 
 .PHONY: flannel-vagrant
 flannel-vagrant:
@@ -160,13 +162,19 @@ ifeq (${K8S_DISTRIBUTION}, k3s)
 	@tput setaf 3; echo -e "SKIPPED (on K3s)\n"; tput sgr0
 
 else
-	kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/manifests/namespace.yaml
-	kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/manifests/metallb.yaml
-	kubectl create secret generic -n metallb-system memberlist --from-literal=secretkey="$(openssl rand -base64 128)"
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply \
+		-f https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/manifests/namespace.yaml
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply \
+		-f https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/manifests/metallb.yaml
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl create secret generic \
+		-n metallb-system memberlist --from-literal=secretkey="$(openssl rand -base64 128)"
 
-	cat metallb-config.yaml | METALLB_POOL=${METALLB_POOL} envsubst | kubectl apply -f -
+	cat metallb-config.yaml | METALLB_POOL=${METALLB_POOL} envsubst \
+		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f -
 
-	kubectl wait --for=condition=Ready --timeout=${METALLB_WAIT} -n metallb-system pod --all || echo 'TIMEOUT' >&2
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready \
+		--timeout=${METALLB_WAIT} -n metallb-system pod --all \
+		|| echo 'TIMEOUT' >&2
 endif
 
 .PHONY: helm
@@ -190,7 +198,9 @@ nfs:
 
 	cat nfs-values.yaml | helm install nfs-provisioner stable/nfs-server-provisioner -f -
 
-	kubectl wait -l app=nfs-server-provisioner --for=condition=ready --timeout=${NFS_WAIT} pod || echo 'TIMEOUT' >&2
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
+		-l app=nfs-server-provisioner --for=condition=ready --timeout=${NFS_WAIT} pod \
+		|| echo 'TIMEOUT' >&2
 
 .PHONY: metrics
 metrics:
@@ -203,7 +213,8 @@ else
 	helm install metrics-server stable/metrics-server --version ${METRICS_VERSION} \
 		--set 'args={--kubelet-insecure-tls, --kubelet-preferred-address-types=InternalIP}' --namespace kube-system
 
-	kubectl wait --for=condition=Available --timeout=${METRICS_WAIT} -n kube-system  deployment.apps/metrics-server \
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
+		--for=condition=Available --timeout=${METRICS_WAIT} -n kube-system  deployment.apps/metrics-server \
 		|| echo 'TIMEOUT' >&2
 endif
 
@@ -220,27 +231,31 @@ else
 	cat traefik-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} OAM_IP=${OAM_IP} envsubst \
 		| helm install traefik stable/traefik --version 1.81.0 --namespace kube-system -f -
 
-	kubectl wait --for=condition=Available --timeout=${TRAEFIK_WAIT} -n kube-system deployment.apps/traefik \
-		|| echo 'TIMEOUT' >&2
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
+		--for=condition=Available --timeout=${TRAEFIK_WAIT} -n kube-system deployment.apps/traefik || echo 'TIMEOUT' >&2
 endif
 
 .PHONY: dashboard
 dashboard:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
-	kubectl create -f https://raw.githubusercontent.com/kubernetes/dashboard/${DASHBOARD_VERSION}/aio/deploy/alternative.yaml
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl create \
+		-f https://raw.githubusercontent.com/kubernetes/dashboard/${DASHBOARD_VERSION}/aio/deploy/alternative.yaml
 
-	cat dashboard-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} envsubst | kubectl apply -f -
+	cat dashboard-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} envsubst \
+		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f -
 
-	kubectl wait --for=condition=Available --timeout=${DASHBOARD_WAIT} -n kubernetes-dashboard \
-		deployment/kubernetes-dashboard || echo 'TIMEOUT' >&2
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
+		--for=condition=Available --timeout=${DASHBOARD_WAIT} -n kubernetes-dashboard deployment/kubernetes-dashboard \
+		|| echo 'TIMEOUT' >&2
 
 .PHONY: prometheus
 prometheus:
 ifeq (${DO_PROMETHEUS}, true)
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
-	kubectl create namespace ${PROMETHEUS_NAMESPACE} --dry-run -o yaml | kubectl apply -f -
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl create namespace ${PROMETHEUS_NAMESPACE} \
+		--dry-run -o yaml | KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f -
 
 	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 	helm repo update
@@ -249,23 +264,24 @@ ifeq (${DO_PROMETHEUS}, true)
 		| helm install ${PROMETHEUS_HELM_RELEASE_NAME} prometheus-community/kube-prometheus-stack \
 		-n ${PROMETHEUS_NAMESPACE} --version ${PROMETHEUS_CHART_VERSION} -f -
 
-	kubectl wait --for=condition=Ready --timeout=${PROMETHEUS_WAIT} -n ${PROMETHEUS_NAMESPACE} pod --all \
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
+		--for=condition=Ready --timeout=${PROMETHEUS_WAIT} -n ${PROMETHEUS_NAMESPACE} pod --all \
 		|| echo 'TIMEOUT' >&2
 endif
 
-.PHONY: prometheus-cleanup
-prometheus-cleanup:
+.PHONY: delete-prometheus
+delete-prometheus:
 ifeq (${DO_PROMETHEUS}, true)
 	helm uninstall ${PROMETHEUS_HELM_RELEASE_NAME} -n ${PROMETHEUS_NAMESPACE}
 
-	kubectl delete crd alertmanagerconfigs.monitoring.coreos.com
-	kubectl delete crd alertmanagers.monitoring.coreos.com
-	kubectl delete crd podmonitors.monitoring.coreos.com
-	kubectl delete crd probes.monitoring.coreos.com
-	kubectl delete crd prometheuses.monitoring.coreos.com
-	kubectl delete crd prometheusrules.monitoring.coreos.com
-	kubectl delete crd servicemonitors.monitoring.coreos.com
-	kubectl delete crd thanosrulers.monitoring.coreos.com
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete crd alertmanagerconfigs.monitoring.coreos.com
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete crd alertmanagers.monitoring.coreos.com
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete crd podmonitors.monitoring.coreos.com
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete crd probes.monitoring.coreos.com
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete crd prometheuses.monitoring.coreos.com
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete crd prometheusrules.monitoring.coreos.com
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete crd servicemonitors.monitoring.coreos.com
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete crd thanosrulers.monitoring.coreos.com
 endif
 
 .PHONY: info-post
@@ -281,7 +297,8 @@ info-post:
 	echo -e "\nDashboard URL:\nhttps://${OAM_DOMAIN}/kubernetes/"
 
 	echo -e "\nDashboard login token:"
-	kubectl -n kubernetes-dashboard describe secret admin-user-token | grep ^token || echo "DASHBOARD IS NOT READY!"
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl -n kubernetes-dashboard describe secret admin-user-token \
+		| grep ^token || echo "DASHBOARD IS NOT READY!"
 
 	echo -e "\nPrometheus URL:\nhttps://${OAM_DOMAIN}/prometheus/"
 
