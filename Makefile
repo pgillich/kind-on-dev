@@ -290,7 +290,7 @@ info-post:
 
 	echo -e "Using custom kubectl config file:\nKUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl ..."
 
-	echo -e "\nAdd below line to /etc/host:\n${OAM_IP} ${OAM_DOMAIN}"
+	echo -e "\nAdd below line to /etc/hosts:\n${OAM_IP} ${OAM_DOMAIN}"
 
 	echo -e "\nTraefik URL:\nhttp://${OAM_DOMAIN}/dashboard/"
 

@@ -62,10 +62,16 @@ Install:
 make all
 ```
 
-Install without Prometheus:
+Example for install without Prometheus:
 
 ```sh
 make all DO_PROMETHEUS=false
+```
+
+Example for installing a non-default distro (the default can be set in `.env`):
+
+```sh
+make all K8S_DISTRIBUTION=k3s
 ```
 
 Post-install steps: please follow instructions of `make info-post`. Note: `info-post` target is called at the end of `make all`.
