@@ -23,6 +23,14 @@ On Ununtu, run below commands, if something is missing or needed:
 > Note: the Vagrant+kubeadm variant uses own vagrant in Docker, which contains all needed plugins.
 > See more details at [kubeadm-vagrant/Ubuntu/README.md](kubeadm-vagrant/Ubuntu/README.md).
 
+A few Linux filesystem limits should be increased, for example:
+
+```sh
+cat /proc/sys/fs/inotify/max_user_watches; echo fs.inotify.max_user_watches=524288 | sudo tee /etc/sysctl.d/50_max_user_watches.conf && sudo sysctl --system; cat /proc/sys/fs/inotify/max_user_watches
+
+cat /proc/sys/fs/inotify/max_user_instances; echo fs.inotify.max_user_instances=1024 | sudo tee /etc/sysctl.d/50_max_user_instances.conf && sudo sysctl --system; cat /proc/sys/fs/inotify/max_user_instances
+```
+
 On Windows, do below steps:
 
 1. Install official Vagrant and needed plugins (mutate and hostmanager), if not installed yet.
