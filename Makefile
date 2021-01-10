@@ -43,6 +43,8 @@ install-kubectl:
 	sudo apt-get update
 	sudo apt-get install -y kubectl
 
+	mkdir -p ~/.kube
+
 	echo >>~/.bashrc
 	echo 'source <(kubectl completion bash)' >>~/.bashrc
 
@@ -67,7 +69,7 @@ install-kvm:
 	sudo apt-get install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils
 	sudo apt-get install virt-manager
 	sudo adduser `id -un` kvm
-	sudo adduser `id -un` libvirtd
+	sudo adduser `id -un` libvirtd || sudo adduser `id -un` libvirt
 
 	@tput setaf 3; echo -e "\nLogout and login to reload group rights!\n"; tput sgr0
 
