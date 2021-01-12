@@ -290,7 +290,7 @@ endif
 info-post:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
-	echo -e "Using custom kubectl config file:\nKUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl ..."
+	echo -e "Using custom kubectl config file:\nKUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl ...\nKUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm ..."
 
 	echo -e "\nAdd below line to /etc/hosts:\n${OAM_IP} ${OAM_DOMAIN}"
 
