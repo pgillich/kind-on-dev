@@ -14,10 +14,8 @@ endif
 
 include .env
 
-.SILENT: info-post
-
 .PHONY: all
-all: cluster flannel metallb helm metrics traefik dashboard prometheus info-post
+all: cluster flannel metallb metrics traefik dashboard prometheus info-post
 
 .PHONY: install-docker
 install-docker:
@@ -64,12 +62,20 @@ install-kind:
 
 	@tput setaf 3; echo -e "\nStart a new shell to load kind completion!\n"; tput sgr0
 
+.PHONY: install-micro
+install-micro:
+	sudo snap install microk8s --classic --channel=${MICRO_VERSION}
+	sudo usermod -a -G microk8s $${USER}
+	microk8s status --wait-ready
+
+	@tput setaf 3; echo -e "\nLogout and login to reload group rights!\n"; tput sgr0
+
 .PHONY: install-kvm
 install-kvm:
 	sudo apt-get install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils
 	sudo apt-get install virt-manager
 	sudo adduser `id -un` kvm
-	sudo adduser `id -un` libvirtd || sudo adduser `id -un` libvirt
+	sudo adduser `id -un` libvirt || sudo adduser `id -un` libvirtd
 
 	@tput setaf 3; echo -e "\nLogout and login to reload group rights!\n"; tput sgr0
 
@@ -90,6 +96,19 @@ ifeq (${DO_VAGRANT_ALIAS}, true)
 	@tput setaf 3; echo -e "\nStart a new shell to reload vagrant alias!\n"; tput sgr0
 endif
 
+.PHONY: install-helm
+install-helm:
+ifeq ($(UNAME), Linux)
+	curl -sfL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+else
+	curl -sfL https://get.helm.sh/helm-${HELM_VERSION}-windows-amd64.zip -o /tmp/helm.zip
+	unzip -o /tmp/helm.zip -d /tmp
+	cp /tmp/windows-amd64/helm.exe /bin
+endif
+
+	helm repo add stable https://charts.helm.sh/stable
+	helm repo update
+
 .PHONY: cluster
 cluster: cluster-${K8S_DISTRIBUTION}
 
@@ -104,6 +123,25 @@ cluster-k3s:
 
 	while [ $$(KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl get -A pod -o name | wc -l) -eq 0 ]; do sleep 1; done
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${K3S_WAIT} -A pod --all \
+		|| echo 'TIMEOUT' >&2
+
+.PHONY: cluster-micro
+cluster-micro:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s disable ha-cluster
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s add-node
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s add-node
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s inspect
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s status --wait-ready
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s enable dns storage
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s config >~/.kube/${K8S_DISTRIBUTION}.yaml
+	cp ~/.kube/${K8S_DISTRIBUTION}.yaml ~/.kube/config
+
+	while [ $$(KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl get -A pod -o name | wc -l) -eq 0 ]; do sleep 1; done
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${MICRO_WAIT} -A pod --all \
 		|| echo 'TIMEOUT' >&2
 
 .PHONY: cluster-kind
@@ -138,6 +176,12 @@ flannel-k3s:
 
 	@tput setaf 3; echo -e "SKIPPED (already done by k3s)\n"; tput sgr0
 
+.PHONY: flannel-micro
+flannel-micro:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	@tput setaf 3; echo -e "SKIPPED (already done by disabling HA)\n"; tput sgr0
+
 .PHONY: flannel-kind
 flannel-kind:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
@@ -157,13 +201,34 @@ flannel-vagrant:
 	@tput setaf 3; echo -e "SKIPPED (already done by vagrant)\n"; tput sgr0
 
 .PHONY: metallb
-metallb:
+metallb: metallb-${K8S_DISTRIBUTION}
+
+.PHONY: metallb-k3s
+metallb-k3s:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
-ifeq (${K8S_DISTRIBUTION}, k3s)
 	@tput setaf 3; echo -e "SKIPPED (on K3s)\n"; tput sgr0
 
-else
+.PHONY: metallb-micro
+metallb-micro:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	microk8s enable metallb:${METALLB_POOL}
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready \
+	--timeout=${METALLB_WAIT} -n metallb-system pod --all \
+	|| echo 'TIMEOUT' >&2
+
+.PHONY: metallb-kind
+metallb-kind: metallb-official
+
+.PHONY: metallb-vagrant
+metallb-vagrant: metallb-official
+
+.PHONY: metallb-official
+metallb-official:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply \
 		-f https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/manifests/namespace.yaml
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply \
@@ -177,50 +242,52 @@ else
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready \
 		--timeout=${METALLB_WAIT} -n metallb-system pod --all \
 		|| echo 'TIMEOUT' >&2
-endif
-
-.PHONY: helm
-helm:
-	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
-
-ifeq ($(UNAME), Linux)
-	curl -sfL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
-else
-	curl -sfL https://get.helm.sh/helm-${HELM_VERSION}-windows-amd64.zip -o /tmp/helm.zip
-	unzip -o /tmp/helm.zip -d /tmp
-	cp /tmp/windows-amd64/helm.exe /bin
-endif
-
-	helm repo add stable https://charts.helm.sh/stable
-	helm repo update
 
 .PHONY: nfs
 nfs:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
-	cat nfs-values.yaml | helm install nfs-provisioner stable/nfs-server-provisioner -f -
+	cat nfs-values.yaml | KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm install nfs-provisioner stable/nfs-server-provisioner -f -
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
 		-l app=nfs-server-provisioner --for=condition=ready --timeout=${NFS_WAIT} pod \
 		|| echo 'TIMEOUT' >&2
 
 .PHONY: metrics
-metrics:
-ifeq (${DO_METRICS}, true)
+metrics: metrics-${K8S_DISTRIBUTION}
+
+.PHONY: metrics-k3s
+metrics-k3s:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
-ifeq (${K8S_DISTRIBUTION}, k3s)
 	@tput setaf 3; echo -e "SKIPPED (already done by K3s)\n"; tput sgr0
-else
-	helm install metrics-server stable/metrics-server --version ${METRICS_VERSION} \
+
+.PHONY: metrics-micro
+metrics-micro:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	microk8s enable metrics-server
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
+		--for=condition=Available --timeout=${METRICS_WAIT} -n kube-system deployment.apps/metrics-server \
+		|| echo 'TIMEOUT' >&2
+
+.PHONY: metrics-kind
+metrics-kind: metrics-official
+
+.PHONY: metrics-vagrant
+metrics-vagrant: metrics-official
+
+.PHONY: metrics-official
+metrics-official:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm install metrics-server stable/metrics-server --version ${METRICS_VERSION} \
 		--set 'args={--kubelet-insecure-tls, --kubelet-preferred-address-types=InternalIP}' --namespace kube-system
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
 		--for=condition=Available --timeout=${METRICS_WAIT} -n kube-system  deployment.apps/metrics-server \
 		|| echo 'TIMEOUT' >&2
-endif
-
-endif
 
 .PHONY: traefik
 traefik:
@@ -231,7 +298,7 @@ ifeq (${K8S_DISTRIBUTION}, k3s)
 		/var/lib/rancher/k3s/server/manifests/traefik.yaml
 else
 	cat traefik-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} OAM_IP=${OAM_IP} envsubst \
-		| helm install traefik stable/traefik --version 1.81.0 --namespace kube-system -f -
+		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm install traefik stable/traefik --version 1.81.0 --namespace kube-system -f -
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
 		--for=condition=Available --timeout=${TRAEFIK_WAIT} -n kube-system deployment.apps/traefik || echo 'TIMEOUT' >&2
@@ -263,7 +330,7 @@ ifeq (${DO_PROMETHEUS}, true)
 	helm repo update
 
 	cat prometheus-values.yaml | OAM_DOMAIN=${OAM_DOMAIN} envsubst \
-		| helm install ${PROMETHEUS_HELM_RELEASE_NAME} prometheus-community/kube-prometheus-stack \
+		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm install ${PROMETHEUS_HELM_RELEASE_NAME} prometheus-community/kube-prometheus-stack \
 		-n ${PROMETHEUS_NAMESPACE} --version ${PROMETHEUS_CHART_VERSION} -f -
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
@@ -274,7 +341,7 @@ endif
 .PHONY: delete-prometheus
 delete-prometheus:
 ifeq (${DO_PROMETHEUS}, true)
-	helm uninstall ${PROMETHEUS_HELM_RELEASE_NAME} -n ${PROMETHEUS_NAMESPACE}
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm uninstall ${PROMETHEUS_HELM_RELEASE_NAME} -n ${PROMETHEUS_NAMESPACE}
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete crd alertmanagerconfigs.monitoring.coreos.com
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete crd alertmanagers.monitoring.coreos.com
@@ -286,6 +353,7 @@ ifeq (${DO_PROMETHEUS}, true)
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete crd thanosrulers.monitoring.coreos.com
 endif
 
+.SILENT: info-post
 .PHONY: info-post
 info-post:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
@@ -307,6 +375,10 @@ info-post:
 	echo -e "\nAlertmanager URL:\nhttps://${OAM_DOMAIN}/alertmanager/"
 
 	echo -e "\nGrafana URL:\nhttps://${OAM_DOMAIN}/grafana/"
+	echo -n "  admin / "; grep -Po 'adminPassword:[\s]*\K.*' prometheus-values.yaml
+
+	if [ $$(cat /proc/sys/fs/inotify/max_user_watches) -lt 524288 ]; then echo -e "\nWARNING! max_user_watches should be increased, see README.md"; fi
+	if [ $$(cat /proc/sys/fs/inotify/max_user_instances) -lt 1024 ]; then echo -e "\nWARNING! max_user_instances should be increased, see README.md"; fi
 
 .PHONY: destroy
 destroy: destroy-${K8S_DISTRIBUTION}
@@ -319,6 +391,10 @@ destroy-k3s:
 .PHONY: destroy-kind
 destroy-kind:
 	kind delete cluster --name ${CLUSTER_NAME}
+
+.PHONY: destroy-micro
+destroy-micro:
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s reset --destroy-storage
 
 .PHONY: destroy-vagrant
 destroy-vagrant:

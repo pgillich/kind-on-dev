@@ -1,6 +1,6 @@
 # kind-on-dev
 
-This repo helps to setup a KinD (and K3s, Vagrant+kubeadm) cluster from scratch.
+This repo helps to setup a KinD (and K3s, MicroK8S, Vagrant+kubeadm) cluster from scratch.
 Usage is published at [Environment for comparing several on-premise Kubernetes distributions (K3s, KinD, kubeadm)](https://pgillich.medium.com/environment-for-comparing-several-on-premise-kubernetes-distributions-k3s-kind-kubeadm-a53675a80a00).
 
 The solution is make-based, see more details in `Makefile` and `.env`.
@@ -14,11 +14,15 @@ On Windows, only Vagrant+kubeadm variant is supported with limitaitons.
 On Ununtu, run below commands, if something is missing or needed:
 
 * `make install-kubectl` (if not installed yet)
+* `make install-micro` (if MicroK8S not installed yet)
 * `make install-docker` (only for KinD)
 * `make install-kind` (only for KinD)
 * `make install-kvm` (only for Vagrant + libvirt/KVM)
 * `make generate-vagrant` (only for Vagrant, needed)
 * `DO_VAGRANT_ALIAS=true make install-vagrant` (only for Vagrant, if not installed yet and `vagrant` would be used in CLI)
+* `make install-helm` (if not installed yet)
+
+> Note: `/etc/docker/daemon.json:insecure-registries` may be set for MicroK8S, if Docker is installed, see: <https://microk8s.io/docs/registry-built-in>.
 
 > Note: the Vagrant+kubeadm variant uses own vagrant in Docker, which contains all needed plugins.
 > See more details at [kubeadm-vagrant/Ubuntu/README.md](kubeadm-vagrant/Ubuntu/README.md).
@@ -126,6 +130,8 @@ make destroy
 ## Known issues
 
 ### Flannel
+
+Flannel is the CNI for MicroK8S, if HA is disabled (if HA is enabled, Calico is the CNI). So, this solution disables HA in MicroK8S automatically.
 
 Flannel on Vagrant+kubeadm is deployed automatically.
 
