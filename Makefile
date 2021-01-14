@@ -130,8 +130,6 @@ cluster-micro:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s disable ha-cluster
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s add-node
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s add-node
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s inspect
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s status --wait-ready
