@@ -66,7 +66,6 @@ install-kind:
 install-micro:
 	sudo snap install microk8s --classic --channel=${MICRO_VERSION}
 	sudo usermod -a -G microk8s $${USER}
-	microk8s status --wait-ready
 
 	@tput setaf 3; echo -e "\nLogout and login to reload group rights!\n"; tput sgr0
 
@@ -129,10 +128,12 @@ cluster-k3s:
 cluster-micro:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s status --wait-ready
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s disable ha-cluster
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s inspect
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s status --wait-ready
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s inspect
+
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s enable dns storage
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s config >~/.kube/${K8S_DISTRIBUTION}.yaml
