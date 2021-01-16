@@ -11,6 +11,11 @@ On Windows, only Vagrant+kubeadm variant is supported with limitaitons.
 
 ## Preparation
 
+Install below packages, if it's missing:
+
+* `make`
+* `git`
+
 On Ununtu, run below commands, if something is missing or needed:
 
 * `make install-kubectl` (if not installed yet)
@@ -27,6 +32,9 @@ On Ununtu, run below commands, if something is missing or needed:
 > Note: the Vagrant+kubeadm variant uses own vagrant in Docker, which contains all needed plugins.
 > See more details at [kubeadm-vagrant/Ubuntu/README.md](kubeadm-vagrant/Ubuntu/README.md).
 
+> Note: There are several limitations and workarounds with Vagrant,
+> See more details at [kubeadm-vagrant/Ubuntu/README.md](kubeadm-vagrant/Ubuntu/README.md).
+
 A few Linux filesystem limits should be increased, for example:
 
 ```sh
@@ -39,7 +47,7 @@ On Windows, do below steps:
 
 1. Install official Vagrant and needed plugins (mutate and hostmanager), if not installed yet.
 1. Install kubectl, if not installed yet.
-1. Install a Cygwin distribution, which has `make` or it can be installed (for example on MobaXterm: `apt-get install make`)
+1. Install a Cygwin distribution, which has `make` and `git` or it can be installed (for example on MobaXterm: `apt-get install make git`)
 1. run `make generate-vagrant`
 
 ## Configuration
@@ -144,6 +152,35 @@ Flannel cannot be deployed on KinD, because a binary is missing on the nodes. Se
 * <https://cloud.garr.it/support/kb/kubernetes/flannel/>
 * <https://programmer.group/a-thorough-understanding-of-kubernetes-cni.html>
 * <https://stackoverflow.com/questions/51169728/failed-create-pod-sandbox-rpc-error-code-unknown-desc-networkplugin-cni-fa/56246246>
+
+
+### Flannel on MicroK8s
+
+The `microk8s inspect` returns errors:
+
+```text
+ FAIL:  Service snap.microk8s.daemon-flanneld is not running
+For more details look at: sudo journalctl -u snap.microk8s.daemon-flanneld
+ FAIL:  Service snap.microk8s.daemon-etcd is not running
+For more details look at: sudo journalctl -u snap.microk8s.daemon-etcd
+  Copy service arguments to the final report tarball
+```
+
+Because of why, the daemon was unable to start:
+
+```text
+$ systemctl status snap.microk8s.daemon-flanneld.service
+● snap.microk8s.daemon-flanneld.service - Service for snap application microk8s.daemon-flanneld
+     Loaded: loaded (/etc/systemd/system/snap.microk8s.daemon-flanneld.service; enabled; vendor preset: enabled)
+     Active: inactive (dead) since Sat 2021-01-16 18:59:25 CET; 7min ago
+    Process: 20890 ExecStart=/usr/bin/snap run microk8s.daemon-flanneld (code=exited, status=0/SUCCESS)
+   Main PID: 20890 (code=exited, status=0/SUCCESS)
+
+jan 16 18:59:25 ubuntu-20 systemd[1]: Started Service for snap application microk8s.daemon-flanneld.
+jan 16 18:59:25 ubuntu-20 systemd[1]: snap.microk8s.daemon-flanneld.service: Succeeded.
+```
+
+Workaround: Uninstall MicroK8s (with --purge), install it again, restart the computer.
 
 ## References
 

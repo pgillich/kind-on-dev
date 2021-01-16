@@ -76,7 +76,7 @@ install-kvm:
 	sudo adduser `id -un` kvm
 	sudo adduser `id -un` libvirt || sudo adduser `id -un` libvirtd
 
-	@tput setaf 3; echo -e "\nLogout and login to reload group rights!\n"; tput sgr0
+	@tput setaf 3; echo -e "\nRestart the system to start daemons and reload group rihts!\n"; tput sgr0
 
 .PHONY: generate-vagrant
 generate-vagrant:
@@ -129,7 +129,7 @@ cluster-micro:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s status --wait-ready
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s disable ha-cluster
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml sudo microk8s disable ha-cluster
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s status --wait-ready
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s inspect
