@@ -1,0 +1,70 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: my-nginx
+  name: my-nginx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: my-nginx
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: my-nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.19.6
+        imagePullPolicy: Always
+        command: ["/bin/sh", "-c"]
+        args:
+          - 'echo "$(date +%H:%M:%S) $(hostname)" > /usr/share/nginx/html/index.html; for i in $(seq 60); do echo "$i ..."; sleep 1; done; nginx -g "daemon off;"'
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 20
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: "0.5"
+            memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: my-nginx
+  name: my-nginx
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: my-nginx
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mysite-nginx-ingress
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+    traefik.ingress.kubernetes.io/rule-type: "PathPrefixStrip"
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /my-nginx
+        pathType: Prefix
+        backend:
+          service:
+            name: my-nginx
+            port:
+              number: 80
