@@ -15,7 +15,7 @@ endif
 include .env
 
 .PHONY: all
-all: cluster flannel metallb metrics traefik dashboard prometheus info-post
+all: cluster cni metallb metrics traefik dashboard prometheus info-post
 
 .PHONY: install-docker
 install-docker:
@@ -77,6 +77,10 @@ install-kvm:
 	sudo adduser `id -un` libvirt || sudo adduser `id -un` libvirtd
 
 	@tput setaf 3; echo -e "\nRestart the system to start daemons and reload group rihts!\n"; tput sgr0
+
+.PHONY: install-istio
+install-istio:
+	curl -L https://istio.io/downloadIstio | sh -
 
 .PHONY: generate-vagrant
 generate-vagrant:
@@ -154,6 +158,15 @@ cluster-kind:
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${KIND_WAIT} -A pod --all \
 		|| echo 'TIMEOUT' >&2
 
+.PHONY: cluster-kistio
+cluster-kistio:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	kind create cluster --name ${CLUSTER_NAME} --config=kistio-config.yaml --wait=${KIND_WAIT}
+
+	kubectl cluster-info --context kind-${CLUSTER_NAME}
+	cp ~/.kube/config ~/.kube/${K8S_DISTRIBUTION}.yaml
+
 .PHONY: cluster-vagrant
 cluster-vagrant:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
@@ -166,23 +179,23 @@ cluster-vagrant:
 		| grep -v '^Starting with' >~/.kube/${K8S_DISTRIBUTION}.yaml
 	cp ~/.kube/${K8S_DISTRIBUTION}.yaml ~/.kube/config
 
-.PHONY: flannel
-flannel: flannel-${K8S_DISTRIBUTION}
+.PHONY: cni
+cni: cni-${K8S_DISTRIBUTION}
 
-.PHONY: flannel-k3s
-flannel-k3s:
+.PHONY: cni-k3s
+cni-k3s:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	@tput setaf 3; echo -e "SKIPPED (already done by k3s)\n"; tput sgr0
 
-.PHONY: flannel-micro
-flannel-micro:
+.PHONY: cni-micro
+cni-micro:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	@tput setaf 3; echo -e "SKIPPED (already done by disabling HA)\n"; tput sgr0
 
-.PHONY: flannel-kind
-flannel-kind:
+.PHONY: cni-kind
+cni-kind:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	@tput setaf 3; echo -e "SKIPPED (buggy)\n"; tput sgr0
@@ -193,8 +206,17 @@ flannel-kind:
 
 	#KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl scale deployment --replicas 1 coredns --namespace kube-system
 
-.PHONY: flannel-vagrant
-flannel-vagrant:
+.PHONY: cni-kistio
+cni-kistio:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl create -f https://docs.projectcalico.org/manifests/tigera-operator.yaml
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl create -f kistio-calico.yaml
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl scale deployment --replicas 1 coredns --namespace kube-system
+
+.PHONY: cni-vagrant
+cni-vagrant:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	@tput setaf 3; echo -e "SKIPPED (already done by vagrant)\n"; tput sgr0
@@ -220,6 +242,9 @@ metallb-micro:
 
 .PHONY: metallb-kind
 metallb-kind: metallb-official
+
+.PHONY: metallb-kistio
+metallb-kistio: metallb-official
 
 .PHONY: metallb-vagrant
 metallb-vagrant: metallb-official
@@ -273,6 +298,9 @@ metrics-micro:
 
 .PHONY: metrics-kind
 metrics-kind: metrics-official
+
+.PHONY: metrics-kistio
+metrics-kistio: metrics-official
 
 .PHONY: metrics-vagrant
 metrics-vagrant: metrics-official
@@ -389,6 +417,10 @@ destroy-k3s:
 
 .PHONY: destroy-kind
 destroy-kind:
+	kind delete cluster --name ${CLUSTER_NAME}
+
+.PHONY: destroy-kistio
+destroy-kistio:
 	kind delete cluster --name ${CLUSTER_NAME}
 
 .PHONY: destroy-micro
