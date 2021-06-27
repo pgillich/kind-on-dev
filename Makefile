@@ -325,7 +325,7 @@ ifeq (${K8S_DISTRIBUTION}, k3s)
 		/var/lib/rancher/k3s/server/manifests/traefik.yaml
 else
 	cat traefik-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} OAM_IP=${OAM_IP} envsubst \
-		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm install traefik stable/traefik --version 1.81.0 --namespace kube-system -f -
+		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm install traefik stable/traefik --version ${TRAEFIK_VERSION} --namespace kube-system -f -
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
 		--for=condition=Available --timeout=${TRAEFIK_WAIT} -n kube-system deployment.apps/traefik || echo 'TIMEOUT' >&2
