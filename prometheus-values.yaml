@@ -1,13 +1,13 @@
 prometheus:
   thanosIngress:
-    ingressClassName: traefik
+    ingressClassName: ${INGRESS_CLASS}
     annotations:
       traefik.ingress.kubernetes.io/rule-type: PathPrefixStrip
     hosts: ["${OAM_DOMAIN}"]
     paths: [/thanos]
   ingress:
     enabled: true
-    ingressClassName: traefik
+    ingressClassName: ${INGRESS_CLASS}
     hosts: ["${OAM_DOMAIN}"]
     paths: [/prometheus]
   prometheusSpec:
@@ -20,7 +20,7 @@ prometheus:
 alertmanager:
   ingress:
     enabled: true
-    ingressClassName: traefik
+    ingressClassName: ${INGRESS_CLASS}
     hosts: ["${OAM_DOMAIN}"]
     paths: [/alertmanager]
   alertmanagerSpec:
@@ -30,7 +30,7 @@ grafana:
   adminPassword: prom-operator
   ingress:
     enabled: true
-    ingressClassName: traefik
+    ingressClassName: ${INGRESS_CLASS}
     hosts: ["${OAM_DOMAIN}"]
     path: /grafana
   sidecar:

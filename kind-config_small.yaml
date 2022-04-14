@@ -1,0 +1,17 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+
+featureGates:
+  EphemeralContainers: true
+
+networking:
+  apiServerAddress: "127.0.0.1"
+  apiServerPort: 6443
+  # podSubnet: "10.244.0.0/16"
+  # disableDefaultCNI: true
+
+nodes:
+  - role: control-plane
+    image: kindest/node:v1.19.16@sha256:81f552397c1e6c1f293f967ecb1344d8857613fb978f963c30e907c32f598467
+  - role: worker
+    image: kindest/node:v1.19.16@sha256:81f552397c1e6c1f293f967ecb1344d8857613fb978f963c30e907c32f598467

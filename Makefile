@@ -15,7 +15,10 @@ endif
 include .env
 
 .PHONY: all
-all: cluster flannel metallb metrics traefik dashboard prometheus info-post
+all: cluster cni metallb metrics traefik dashboard prometheus info-post
+
+.PHONY: no-net
+no-net: cluster metallb metrics dashboard prometheus info-post
 
 .PHONY: install-docker
 install-docker:
@@ -147,7 +150,7 @@ cluster-micro:
 cluster-kind:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
-	kind create cluster --name ${CLUSTER_NAME} --config=kind-config.yaml --wait=${KIND_WAIT}
+	kind create cluster --name ${CLUSTER_NAME} --config=${KIND_CONFIG} --wait=${KIND_WAIT}
 	kubectl cluster-info --context kind-${CLUSTER_NAME}
 	cp ~/.kube/config ~/.kube/${K8S_DISTRIBUTION}.yaml
 
@@ -166,23 +169,28 @@ cluster-vagrant:
 		| grep -v '^Starting with' >~/.kube/${K8S_DISTRIBUTION}.yaml
 	cp ~/.kube/${K8S_DISTRIBUTION}.yaml ~/.kube/config
 
-.PHONY: flannel
-flannel: flannel-${K8S_DISTRIBUTION}
+.PHONY: cni
+cni: cni-${K8S_DISTRIBUTION}
 
-.PHONY: flannel-k3s
-flannel-k3s:
+.PHONY: cni-k3s
+cni-k3s:
+ifeq (${ENABLE_CNI}, true)
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	@tput setaf 3; echo -e "SKIPPED (already done by k3s)\n"; tput sgr0
+endif
 
-.PHONY: flannel-micro
-flannel-micro:
+.PHONY: cni-micro
+cni-micro:
+ifeq (${ENABLE_CNI}, true)
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	@tput setaf 3; echo -e "SKIPPED (already done by disabling HA)\n"; tput sgr0
+endif
 
-.PHONY: flannel-kind
-flannel-kind:
+.PHONY: cni-kind
+cni-kind:
+ifeq (${ENABLE_CNI}, true)
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	@tput setaf 3; echo -e "SKIPPED (buggy)\n"; tput sgr0
@@ -192,12 +200,15 @@ flannel-kind:
 	#KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f /tmp/kube-flannel.yml
 
 	#KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl scale deployment --replicas 1 coredns --namespace kube-system
+endif
 
-.PHONY: flannel-vagrant
-flannel-vagrant:
+.PHONY: cni-vagrant
+cni-vagrant:
+ifeq (${ENABLE_CNI}, true)
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	@tput setaf 3; echo -e "SKIPPED (already done by vagrant)\n"; tput sgr0
+endif
 
 .PHONY: metallb
 metallb: metallb-${K8S_DISTRIBUTION}
@@ -290,6 +301,7 @@ metrics-official:
 
 .PHONY: traefik
 traefik:
+ifeq (${ENABLE_TRAEFIK}, true)
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 ifeq (${K8S_DISTRIBUTION}, k3s)
@@ -297,10 +309,11 @@ ifeq (${K8S_DISTRIBUTION}, k3s)
 		/var/lib/rancher/k3s/server/manifests/traefik.yaml
 else
 	cat traefik-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} OAM_IP=${OAM_IP} envsubst \
-		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm install traefik stable/traefik --version 1.81.0 --namespace kube-system -f -
+		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm install traefik stable/traefik --version ${TRAEFIK_VERSION} --namespace kube-system -f -
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
 		--for=condition=Available --timeout=${TRAEFIK_WAIT} -n kube-system deployment.apps/traefik || echo 'TIMEOUT' >&2
+endif
 endif
 
 .PHONY: dashboard
@@ -310,7 +323,7 @@ dashboard:
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl create \
 		-f https://raw.githubusercontent.com/kubernetes/dashboard/${DASHBOARD_VERSION}/aio/deploy/alternative.yaml
 
-	cat dashboard-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} envsubst \
+	cat dashboard-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} INGRESS_CLASS=${INGRESS_CLASS} envsubst \
 		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f -
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
@@ -331,7 +344,7 @@ ifeq (${DO_PROMETHEUS}, true)
 	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 	helm repo update
 
-	cat prometheus-values.yaml | OAM_DOMAIN=${OAM_DOMAIN} envsubst \
+	cat prometheus-values.yaml | OAM_DOMAIN=${OAM_DOMAIN} INGRESS_CLASS=${INGRESS_CLASS} envsubst \
 		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm install ${PROMETHEUS_HELM_RELEASE_NAME} prometheus-community/kube-prometheus-stack \
 		-n ${PROMETHEUS_NAMESPACE} --version ${PROMETHEUS_CHART_VERSION} -f -
 
