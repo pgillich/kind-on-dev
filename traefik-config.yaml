@@ -4,6 +4,10 @@ dashboard:
 #loadBalancerIP: "${TRAEFIK_LOADBALANCERIP}"
 #externalIP: "${TRAEFIK_EXTERNALIP}"
 serviceType: NodePort
+service:
+  nodePorts:
+    http: 30080
+    https: 30443
 rbac:
   enabled: true
 ssl:
