@@ -12,6 +12,8 @@ else
 vagrant = PATH=$$(cygpath "$$WINDIR/System32/OpenSSH"):$$PATH vagrant
 endif
 
+helm-repo-stable = (helm repo add stable https://charts.helm.sh/stable && helm repo update)
+
 include .env
 
 .PHONY: all
@@ -101,15 +103,18 @@ endif
 .PHONY: install-helm
 install-helm:
 ifeq ($(UNAME), Linux)
-	curl -sfL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+	echo curl -sfL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 # | bash
 else
 	curl -sfL https://get.helm.sh/helm-${HELM_VERSION}-windows-amd64.zip -o /tmp/helm.zip
 	unzip -o /tmp/helm.zip -d /tmp
 	cp /tmp/windows-amd64/helm.exe /bin
 endif
 
-	helm repo add stable https://charts.helm.sh/stable
-	helm repo update
+	$(call helm-repo-stable)
+
+.PHONY: helm-repo-stable
+helm-repo-stable:
+	$(call helm-repo-stable)
 
 .PHONY: cluster
 cluster: cluster-${K8S_DISTRIBUTION}
@@ -174,7 +179,7 @@ cni: cni-${K8S_DISTRIBUTION}
 
 .PHONY: cni-k3s
 cni-k3s:
-ifeq (${ENABLE_CNI}, true)
+ifeq (${DO_CNI}, true)
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	@tput setaf 3; echo -e "SKIPPED (already done by k3s)\n"; tput sgr0
@@ -182,7 +187,7 @@ endif
 
 .PHONY: cni-micro
 cni-micro:
-ifeq (${ENABLE_CNI}, true)
+ifeq (${DO_CNI}, true)
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	@tput setaf 3; echo -e "SKIPPED (already done by disabling HA)\n"; tput sgr0
@@ -190,7 +195,7 @@ endif
 
 .PHONY: cni-kind
 cni-kind:
-ifeq (${ENABLE_CNI}, true)
+ifeq (${DO_CNI}, true)
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	@tput setaf 3; echo -e "SKIPPED (buggy)\n"; tput sgr0
@@ -204,7 +209,7 @@ endif
 
 .PHONY: cni-vagrant
 cni-vagrant:
-ifeq (${ENABLE_CNI}, true)
+ifeq (${DO_CNI}, true)
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	@tput setaf 3; echo -e "SKIPPED (already done by vagrant)\n"; tput sgr0
@@ -301,15 +306,17 @@ metrics-official:
 
 .PHONY: traefik
 traefik:
-ifeq (${ENABLE_TRAEFIK}, true)
+ifeq (${DO_TRAEFIK}, true)
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 ifeq (${K8S_DISTRIBUTION}, k3s)
 	sudo sed -i -e '/    rbac:/i\' -e "    dashboard:\n      enabled: true\n      domain:  ${OAM_DOMAIN}" \
 		/var/lib/rancher/k3s/server/manifests/traefik.yaml
 else
-	cat traefik-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} OAM_IP=${OAM_IP} envsubst \
+	cat traefik-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} OAM_IP=${OAM_IP} TRAEFIK_LOADBALANCERIP=${TRAEFIK_LOADBALANCERIP} TRAEFIK_EXTERNALIP=${TRAEFIK_EXTERNALIP} envsubst \
 		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm install traefik stable/traefik --version ${TRAEFIK_VERSION} --namespace kube-system -f -
+#	cat traefik-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} OAM_IP=${OAM_IP} TRAEFIK_LOADBALANCERIP=${TRAEFIK_LOADBALANCERIP} TRAEFIK_EXTERNALIP=${TRAEFIK_EXTERNALIP} envsubst \
+#		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm template traefik stable/traefik --version ${TRAEFIK_VERSION} --namespace kube-system -f -
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
 		--for=condition=Available --timeout=${TRAEFIK_WAIT} -n kube-system deployment.apps/traefik || echo 'TIMEOUT' >&2

@@ -1,7 +1,9 @@
 dashboard:
   enabled: true
   domain: "${OAM_DOMAIN}"
-loadBalancerIP: "${OAM_IP}"
+#loadBalancerIP: "${TRAEFIK_LOADBALANCERIP}"
+#externalIP: "${TRAEFIK_EXTERNALIP}"
+serviceType: NodePort
 rbac:
   enabled: true
 ssl:
