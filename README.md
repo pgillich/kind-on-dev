@@ -5,7 +5,9 @@ Usage is published at [Environment for comparing several on-premise Kubernetes d
 
 The solution is make-based, see more details in `Makefile` and `.env`.
 
-On Windows, only Vagrant+kubeadm variant is supported with limitaitons.
+On Windows, only below combinations are supported with limitaitons:
+* Vagrant+kubeadm
+* WSL2 with KinD
 
 > Warning: This deployment is not secure and must be hardened before using it in production.
 
@@ -40,10 +42,10 @@ A few Linux filesystem limits should be increased, for example:
 ```sh
 cat /proc/sys/fs/inotify/max_user_watches; echo fs.inotify.max_user_watches=524288 | sudo tee /etc/sysctl.d/50_max_user_watches.conf && sudo sysctl --system; cat /proc/sys/fs/inotify/max_user_watches
 
-cat /proc/sys/fs/inotify/max_user_instances; echo fs.inotify.max_user_instances=1024 | sudo tee /etc/sysctl.d/50_max_user_instances.conf && sudo sysctl --system; cat /proc/sys/fs/inotify/max_user_instances
+cat /proc/sys/fs/inotify/max_user_instances; echo fs.inotify.max_user_instances=8196 | sudo tee /etc/sysctl.d/50_max_user_instances.conf && sudo sysctl --system; cat /proc/sys/fs/inotify/max_user_instances
 ```
 
-On Windows, do below steps:
+On Windows with Vagrant+kubeadm, do below steps:
 
 1. Install official Vagrant and needed plugins (mutate and hostmanager), if not installed yet.
 1. Install kubectl, if not installed yet.
@@ -57,6 +59,8 @@ Review `.env`.
 Review `*.yaml` files.
 
 Review `kubeadm-vagrant/Ubuntu/Vagrantfile`, if Vagrant is used. Hint: RAM allocation for VMs is very low!
+
+Review `kind-config_wsl2.yaml`, if WSL2 with KinD is used.
 
 Help for Prometheus configuration:
 
@@ -92,6 +96,12 @@ Example for installing a non-default distro (the default can be set in `.env`):
 
 ```sh
 make all K8S_DISTRIBUTION=k3s
+```
+
+Example for installing WSL2 with KinD:
+
+```sh
+make all OAM_DOMAIN=admin.ncd.local OAM_IP="" TRAEFIK_SERVICETYPE=NodePort KIND_CONFIG=kind-config_wsl2.yaml DO_CNI=false DO_METALLB=false
 ```
 
 Post-install steps: please follow instructions of `make info-post`. Note: `info-post` target is called at the end of `make all`.
@@ -136,6 +146,19 @@ make destroy
 ```
 
 ## Known issues
+
+### WSL2
+
+Only WSL2 with KinD combination is supported. Only 1 worker node is supported.
+
+Before starting the install, `max_user_watches` and `max_user_instances` must be set properly (`sysctl --system`).
+
+After restart, the WSL2 IP address will be changed. The WSL2 IP address for `C:\windows\system32\drivers\etc\hosts` can be determined by one of below commands:
+
+* `wsl.exe hostname -I`
+* `wsl.exe -- ip -4 a show dev eth0 scope global`
+
+It may be a solution: <https://github.com/microsoft/WSL/issues/4210#issuecomment-648570493>
 
 ### Flannel
 
