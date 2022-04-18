@@ -12,6 +12,8 @@ else
 vagrant = PATH=$$(cygpath "$$WINDIR/System32/OpenSSH"):$$PATH vagrant
 endif
 
+helm-repo-stable = (helm repo add stable https://charts.helm.sh/stable && helm repo update)
+
 include .env
 
 .PHONY: all
@@ -101,15 +103,18 @@ endif
 .PHONY: install-helm
 install-helm:
 ifeq ($(UNAME), Linux)
-	curl -sfL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+	echo curl -sfL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 # | bash
 else
 	curl -sfL https://get.helm.sh/helm-${HELM_VERSION}-windows-amd64.zip -o /tmp/helm.zip
 	unzip -o /tmp/helm.zip -d /tmp
 	cp /tmp/windows-amd64/helm.exe /bin
 endif
 
-	helm repo add stable https://charts.helm.sh/stable
-	helm repo update
+	$(call helm-repo-stable)
+
+.PHONY: helm-repo-stable
+helm-repo-stable:
+	$(call helm-repo-stable)
 
 .PHONY: cluster
 cluster: cluster-${K8S_DISTRIBUTION}
@@ -174,7 +179,7 @@ cni: cni-${K8S_DISTRIBUTION}
 
 .PHONY: cni-k3s
 cni-k3s:
-ifeq (${ENABLE_CNI}, true)
+ifeq (${DO_CNI}, true)
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	@tput setaf 3; echo -e "SKIPPED (already done by k3s)\n"; tput sgr0
@@ -182,7 +187,7 @@ endif
 
 .PHONY: cni-micro
 cni-micro:
-ifeq (${ENABLE_CNI}, true)
+ifeq (${DO_CNI}, true)
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	@tput setaf 3; echo -e "SKIPPED (already done by disabling HA)\n"; tput sgr0
@@ -190,7 +195,7 @@ endif
 
 .PHONY: cni-kind
 cni-kind:
-ifeq (${ENABLE_CNI}, true)
+ifeq (${DO_CNI}, true)
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	@tput setaf 3; echo -e "SKIPPED (buggy)\n"; tput sgr0
@@ -204,7 +209,7 @@ endif
 
 .PHONY: cni-vagrant
 cni-vagrant:
-ifeq (${ENABLE_CNI}, true)
+ifeq (${DO_CNI}, true)
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	@tput setaf 3; echo -e "SKIPPED (already done by vagrant)\n"; tput sgr0
@@ -215,12 +220,15 @@ metallb: metallb-${K8S_DISTRIBUTION}
 
 .PHONY: metallb-k3s
 metallb-k3s:
+ifeq (${DO_METALLB}, true)
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	@tput setaf 3; echo -e "SKIPPED (on K3s)\n"; tput sgr0
+endif
 
 .PHONY: metallb-micro
 metallb-micro:
+ifeq (${DO_METALLB}, true)
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	microk8s enable metallb:${METALLB_POOL}
@@ -228,6 +236,7 @@ metallb-micro:
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready \
 	--timeout=${METALLB_WAIT} -n metallb-system pod --all \
 	|| echo 'TIMEOUT' >&2
+endif
 
 .PHONY: metallb-kind
 metallb-kind: metallb-official
@@ -237,6 +246,7 @@ metallb-vagrant: metallb-official
 
 .PHONY: metallb-official
 metallb-official:
+ifeq (${DO_METALLB}, true)
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply \
@@ -252,6 +262,7 @@ metallb-official:
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready \
 		--timeout=${METALLB_WAIT} -n metallb-system pod --all \
 		|| echo 'TIMEOUT' >&2
+endif
 
 .PHONY: nfs
 nfs:
@@ -301,15 +312,17 @@ metrics-official:
 
 .PHONY: traefik
 traefik:
-ifeq (${ENABLE_TRAEFIK}, true)
+ifeq (${DO_TRAEFIK}, true)
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 ifeq (${K8S_DISTRIBUTION}, k3s)
 	sudo sed -i -e '/    rbac:/i\' -e "    dashboard:\n      enabled: true\n      domain:  ${OAM_DOMAIN}" \
 		/var/lib/rancher/k3s/server/manifests/traefik.yaml
 else
-	cat traefik-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} OAM_IP=${OAM_IP} envsubst \
+	cat traefik-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} OAM_IP=${OAM_IP} TRAEFIK_SERVICETYPE=${TRAEFIK_SERVICETYPE} envsubst \
 		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm install traefik stable/traefik --version ${TRAEFIK_VERSION} --namespace kube-system -f -
+#	cat traefik-config.yaml | OAM_DOMAIN=${OAM_DOMAIN} OAM_IP=${OAM_IP} TRAEFIK_LOADBALANCERIP=${TRAEFIK_LOADBALANCERIP} TRAEFIK_EXTERNALIP=${TRAEFIK_EXTERNALIP} envsubst \
+#		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm template traefik stable/traefik --version ${TRAEFIK_VERSION} --namespace kube-system -f -
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
 		--for=condition=Available --timeout=${TRAEFIK_WAIT} -n kube-system deployment.apps/traefik || echo 'TIMEOUT' >&2
@@ -375,7 +388,12 @@ info-post:
 
 	echo -e "Using custom kubectl config file:\nKUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl ...\nKUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm ..."
 
+ifeq (${OAM_IP},)
+	echo -e "\nAdd below line to /etc/hosts:\n127.0.0.1 ${OAM_DOMAIN}"
+	echo -e "\nAdd below line to C:\windows\system32\drivers\etc\hosts:\n`ip a show dev eth0 scope global | grep -oP 'inet \K[0-9.]+'` ${OAM_DOMAIN}"
+else
 	echo -e "\nAdd below line to /etc/hosts:\n${OAM_IP} ${OAM_DOMAIN}"
+endif
 
 	echo -e "\nTraefik URL:\nhttp://${OAM_DOMAIN}/dashboard/"
 
@@ -393,7 +411,7 @@ info-post:
 	echo -n "  admin / "; grep -Po 'adminPassword:[\s]*\K.*' prometheus-values.yaml
 
 	if [ $$(cat /proc/sys/fs/inotify/max_user_watches) -lt 524288 ]; then echo -e "\nWARNING! max_user_watches should be increased, see README.md"; fi
-	if [ $$(cat /proc/sys/fs/inotify/max_user_instances) -lt 1024 ]; then echo -e "\nWARNING! max_user_instances should be increased, see README.md"; fi
+	if [ $$(cat /proc/sys/fs/inotify/max_user_instances) -lt 8196 ]; then echo -e "\nWARNING! max_user_instances should be increased, see README.md"; fi
 
 .PHONY: destroy
 destroy: destroy-${K8S_DISTRIBUTION}

@@ -2,6 +2,11 @@ dashboard:
   enabled: true
   domain: "${OAM_DOMAIN}"
 loadBalancerIP: "${OAM_IP}"
+serviceType: ${TRAEFIK_SERVICETYPE}
+service:
+  nodePorts:
+    http: 30080
+    https: 30443
 rbac:
   enabled: true
 ssl:
