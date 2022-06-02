@@ -351,9 +351,6 @@ ifeq (${DO_PROMETHEUS}, true)
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl create namespace ${PROMETHEUS_NAMESPACE} \
 		--dry-run -o yaml | KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f -
 
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl create \
-		-n ${PROMETHEUS_NAMESPACE} -f pgillich-tree-panel.yaml
-
 	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 	helm repo update
 

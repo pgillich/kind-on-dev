@@ -41,7 +41,7 @@ grafana:
     GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: pgillich-tree-panel
   plugins:
    - marcusolsson-json-datasource
-#   - pgillich-tree-panel
+   - pgillich-tree-panel
   additionalDataSources:
     - name: K8s API
       type: marcusolsson-json-datasource
@@ -49,10 +49,6 @@ grafana:
     - name: K8s log API
       type: marcusolsson-json-datasource
       url: http://kubectl-proxy:8002
-  extraConfigmapMounts:
-    - name: pgillich-tree-panel
-      mountPath: /var/lib/grafana/plugins/pgillich-tree-panel
-      configMap: pgillich-tree-panel
   extraEmptyDirMounts:
     - name: grafana-plugins
       mountPath: /var/lib/grafana/plugins
