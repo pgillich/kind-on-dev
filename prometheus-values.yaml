@@ -49,6 +49,9 @@ grafana:
     - name: K8s log API
       type: marcusolsson-json-datasource
       url: http://kubectl-proxy:8002
+    - name: K8s ext API
+      type: marcusolsson-json-datasource
+      url: http://kubectl-proxy:8003
   extraEmptyDirMounts:
     - name: grafana-plugins
       mountPath: /var/lib/grafana/plugins
