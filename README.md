@@ -3,6 +3,10 @@
 This repo helps to setup a KinD (and K3s, MicroK8S, Vagrant+kubeadm) cluster from scratch.
 Usage is published at [Environment for comparing several on-premise Kubernetes distributions (K3s, KinD, kubeadm)](https://pgillich.medium.com/environment-for-comparing-several-on-premise-kubernetes-distributions-k3s-kind-kubeadm-a53675a80a00).
 
+> This development branch supports Kubernetes 1.24.
+> Traefik is replaced to Nginx ingress.
+> Work in progress, WSL2 with KinD is in focus
+
 The solution is make-based, see more details in `Makefile` and `.env`.
 
 On Windows, only below combinations are supported with limitaitons:
@@ -43,6 +47,12 @@ A few Linux filesystem limits should be increased, for example:
 cat /proc/sys/fs/inotify/max_user_watches; echo fs.inotify.max_user_watches=524288 | sudo tee /etc/sysctl.d/50_max_user_watches.conf && sudo sysctl --system; cat /proc/sys/fs/inotify/max_user_watches
 
 cat /proc/sys/fs/inotify/max_user_instances; echo fs.inotify.max_user_instances=8196 | sudo tee /etc/sysctl.d/50_max_user_instances.conf && sudo sysctl --system; cat /proc/sys/fs/inotify/max_user_instances
+```
+
+Add below line to `/etc/hosts`:
+
+```text
+127.0.2.1       dashboard.kind-01.company.com grafana.kind-01.company.com prometheus.kind-01.company.com
 ```
 
 On Windows with Vagrant+kubeadm, do below steps:
@@ -101,7 +111,7 @@ make all K8S_DISTRIBUTION=k3s
 Example for installing WSL2 with KinD:
 
 ```sh
-make all OAM_DOMAIN=admin.ncd.local OAM_IP="" TRAEFIK_SERVICETYPE=NodePort KIND_CONFIG=kind-config_wsl2.yaml DO_CNI=false DO_METALLB=false
+make all DO_CNI=false DO_METALLB=false
 ```
 
 Post-install steps: please follow instructions of `make info-post`. Note: `info-post` target is called at the end of `make all`.
@@ -149,7 +159,7 @@ make destroy
 
 ### WSL2
 
-Only WSL2 with KinD combination is supported. Only 1 worker node is supported.
+Only WSL2 with KinD combination is supported.
 
 Before starting the install, `max_user_watches` and `max_user_instances` must be set properly (`sysctl --system`).
 

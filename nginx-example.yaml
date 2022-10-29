@@ -54,9 +54,6 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: mysite-nginx-ingress
-  annotations:
-    kubernetes.io/ingress.class: "traefik"
-    traefik.ingress.kubernetes.io/rule-type: "PathPrefixStrip"
 spec:
   rules:
   - http:

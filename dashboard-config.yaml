@@ -17,20 +17,26 @@ subjects:
     name: admin-user
     namespace: kubernetes-dashboard
 ---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: admin-user-token
+  namespace: kubernetes-dashboard
+  annotations:
+    kubernetes.io/service-account.name: admin-user
+type: kubernetes.io/service-account-token
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: kubernetes-dashboard-ingress
   namespace: kubernetes-dashboard
-  annotations:
-    kubernetes.io/ingress.class: "${INGRESS_CLASS}"
-    traefik.ingress.kubernetes.io/rule-type: "PathPrefixStrip"
 spec:
   rules:
-    - host: "${OAM_DOMAIN}"
+    - host: "dashboard.${NGINX_DOMAIN}"
       http:
         paths:
-          - path: /kubernetes
+          - path: /
             pathType: Prefix
             backend:
               service:

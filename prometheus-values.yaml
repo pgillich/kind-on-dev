@@ -1,27 +1,22 @@
 prometheus:
   thanosIngress:
-    ingressClassName: ${INGRESS_CLASS}
-    annotations:
-      traefik.ingress.kubernetes.io/rule-type: PathPrefixStrip
-    hosts: ["${OAM_DOMAIN}"]
+    hosts: ["prometheus.${NGINX_DOMAIN}"]
     paths: [/thanos]
   ingress:
     enabled: true
-    ingressClassName: ${INGRESS_CLASS}
-    hosts: ["${OAM_DOMAIN}"]
-    paths: [/prometheus]
+    hosts: ["prometheus.${NGINX_DOMAIN}"]
+    paths: [/]
   prometheusSpec:
     ruleSelectorNilUsesHelmValues: false
     serviceMonitorSelectorNilUsesHelmValues: false
     podMonitorSelectorNilUsesHelmValues: false
     probeSelectorNilUsesHelmValues: false
-    routePrefix: /prometheus
+    routePrefix: /
 
 alertmanager:
   ingress:
     enabled: true
-    ingressClassName: ${INGRESS_CLASS}
-    hosts: ["${OAM_DOMAIN}"]
+    hosts: ["prometheus.${NGINX_DOMAIN}"]
     paths: [/alertmanager]
   alertmanagerSpec:
     routePrefix: /alertmanager
@@ -30,9 +25,8 @@ grafana:
   adminPassword: prom-operator
   ingress:
     enabled: true
-    ingressClassName: ${INGRESS_CLASS}
-    hosts: ["${OAM_DOMAIN}"]
-    path: /grafana
+    hosts: ["grafana.${NGINX_DOMAIN}"]
+    path: /
   sidecar:
     dashboards:
       provider:
