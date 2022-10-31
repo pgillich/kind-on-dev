@@ -17,7 +17,7 @@ helm-repo-stable = (helm repo add stable https://charts.helm.sh/stable && helm r
 include .env
 
 .PHONY: all
-all: cluster cni metallb metrics ingress dashboard prometheus info-post
+all: cluster cni metallb metrics istio dashboard prometheus info-post
 
 .PHONY: no-net
 no-net: cluster metallb metrics dashboard prometheus info-post
@@ -264,6 +264,29 @@ ifeq (${DO_METALLB}, true)
 		|| echo 'TIMEOUT' >&2
 endif
 
+.PHONY: istio
+istio:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	cd /tmp \
+		&& curl -sL https://istio.io/downloadIstio | ISTIO_VERSION=${ISTIO_VERSION} TARGET_ARCH=x86_64 sh -
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml \
+		/tmp/istio-${ISTIO_VERSION}/bin/istioctl install --set profile=demo -f istio-config.yaml -y
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
+		--for=condition=Ready --timeout=${ISTIO_WAIT} -n istio-system pod --all \
+		|| echo 'TIMEOUT' >&2
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f /tmp/istio-${ISTIO_VERSION}/samples/addons/kiali.yaml
+
+	cat istio-ingress.yaml | EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
+		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f -
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
+		--for=condition=Available --timeout=${ISTIO_WAIT} -n istio-system deployment.apps/kiali \
+		|| echo 'TIMEOUT' >&2
+
 .PHONY: nfs
 nfs:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
@@ -303,7 +326,7 @@ metrics-vagrant: metrics-official
 metrics-official:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
-#  helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ && helm repo update
+  helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ && helm repo update
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm install metrics-server metrics-server/metrics-server --version ${METRICS_VERSION} \
 		--set 'args={--kubelet-insecure-tls, --kubelet-preferred-address-types=InternalIP}' --namespace kube-system
@@ -312,30 +335,14 @@ metrics-official:
 		--for=condition=Available --timeout=${METRICS_WAIT} -n kube-system  deployment.apps/metrics-server \
 		|| echo 'TIMEOUT' >&2
 
-.PHONY: ingress
-ingress:
-	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
-
-	mkdir -p /tmp/ingress-nginx && \
-		curl -s https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-${NGINX_VERSION}/deploy/static/provider/kind/kustomization.yaml \
-			-o /tmp/ingress-nginx/kustomization.yaml && \
-		curl -s https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-${NGINX_VERSION}/deploy/static/provider/kind/deploy.yaml \
-			-o /tmp/ingress-nginx/deploy.yaml
-
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -k /tmp/ingress-nginx
-
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --namespace ingress-nginx \
-  	--for=condition=ready pod --timeout=${NGINX_WAIT} --selector=app.kubernetes.io/component=controller \
-		|| echo 'TIMEOUT' >&2
-
 .PHONY: dashboard
 dashboard:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl create \
-		-f https://raw.githubusercontent.com/kubernetes/dashboard/${DASHBOARD_VERSION}/aio/deploy/alternative.yaml
+		-f https://raw.githubusercontent.com/kubernetes/dashboard/${DASHBOARD_VERSION}/aio/deploy/recommended.yaml
 
-	cat dashboard-config.yaml | NGINX_DOMAIN=${NGINX_DOMAIN} envsubst \
+	cat dashboard-config.yaml | EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
 		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f -
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl create \
@@ -366,9 +373,12 @@ ifeq (${DO_PROMETHEUS}, true)
 	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 	helm repo update
 
-	cat prometheus-values.yaml | NGINX_DOMAIN=${NGINX_DOMAIN} envsubst \
+	cat prometheus-values.yaml | EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
 		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm install ${PROMETHEUS_HELM_RELEASE_NAME} prometheus-community/kube-prometheus-stack \
 		-n ${PROMETHEUS_NAMESPACE} --version ${PROMETHEUS_CHART_VERSION} -f -
+
+	cat prometheus-ingress.yaml | EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
+		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f -
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
 		--for=condition=Ready --timeout=${PROMETHEUS_WAIT} -n ${PROMETHEUS_NAMESPACE} pod --all \
@@ -398,23 +408,25 @@ info-post:
 	echo -e "Using custom kubectl config file:\nKUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl ...\nKUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm ..."
 
 ifeq (${OAM_IP},)
-	echo -e "\nAdd below line to /etc/hosts:\n127.0.2.1       dashboard.${NGINX_DOMAIN} grafana.${NGINX_DOMAIN} prometheus.${NGINX_DOMAIN}"
-	echo -e "\nAdd below line to C:\windows\system32\drivers\etc\hosts:\n`ip a show dev eth0 scope global | grep -oP 'inet \K[0-9.]+'` dashboard.${NGINX_DOMAIN} grafana.${NGINX_DOMAIN} prometheus.${NGINX_DOMAIN}"
+	echo -e "\nAdd below line to /etc/hosts:\n$$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}')       istio.${EXTERNAL_DOMAIN} dashboard.${EXTERNAL_DOMAIN} grafana.${EXTERNAL_DOMAIN} prometheus.${EXTERNAL_DOMAIN}"
+	echo -e "\nAdd below line to C:\windows\system32\drivers\etc\hosts:\n`ip a show dev eth0 scope global | grep -oP 'inet \K[0-9.]+'` dashboard.${EXTERNAL_DOMAIN} grafana.${EXTERNAL_DOMAIN} prometheus.${EXTERNAL_DOMAIN}"
 else
-	echo -e "\nAdd below line to /etc/hosts:\n${OAM_IP} dashboard.${NGINX_DOMAIN} grafana.${NGINX_DOMAIN} prometheus.${NGINX_DOMAIN}"
+	echo -e "\nAdd below line to /etc/hosts:\n${OAM_IP} dashboard.${EXTERNAL_DOMAIN} grafana.${EXTERNAL_DOMAIN} prometheus.${EXTERNAL_DOMAIN}"
 endif
 
-	echo -e "\nDashboard URL:\nhttps://dashboard.${NGINX_DOMAIN}"
+	echo -e "\nDashboard URL:\nhttps://dashboard.${EXTERNAL_DOMAIN}"
 
 	echo -e "\nDashboard login token:"
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl -n kubernetes-dashboard describe secret admin-user-token \
 		| grep ^token || echo "DASHBOARD IS NOT READY!"
 
-	echo -e "\nPrometheus URL:\nhttp://prometheus.${NGINX_DOMAIN}"
+	echo -e "\nKiali URL:\nhttp://istio.${EXTERNAL_DOMAIN}/kiali/"
 
-	echo -e "\nAlertmanager URL:\nhttps://prometheus.${NGINX_DOMAIN}/alertmanager/"
+	echo -e "\nPrometheus URL:\nhttp://prometheus.${EXTERNAL_DOMAIN}"
 
-	echo -e "\nGrafana URL:\nhttp://grafana.${NGINX_DOMAIN}"
+	echo -e "\nAlertmanager URL:\nhttp://prometheus.${EXTERNAL_DOMAIN}/alertmanager/"
+
+	echo -e "\nGrafana URL:\nhttp://grafana.${EXTERNAL_DOMAIN}"
 	echo -n "  admin / "; grep -Po 'adminPassword:[\s]*\K.*' prometheus-values.yaml
 
 	if [ $$(cat /proc/sys/fs/inotify/max_user_watches) -lt 524288 ]; then echo -e "\nWARNING! max_user_watches should be increased, see README.md"; fi

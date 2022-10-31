@@ -1,11 +1,9 @@
 prometheus:
   thanosIngress:
-    hosts: ["prometheus.${NGINX_DOMAIN}"]
+    hosts: ["prometheus.${EXTERNAL_DOMAIN}"]
     paths: [/thanos]
   ingress:
-    enabled: true
-    hosts: ["prometheus.${NGINX_DOMAIN}"]
-    paths: [/]
+    enabled: false
   prometheusSpec:
     ruleSelectorNilUsesHelmValues: false
     serviceMonitorSelectorNilUsesHelmValues: false
@@ -15,18 +13,14 @@ prometheus:
 
 alertmanager:
   ingress:
-    enabled: true
-    hosts: ["prometheus.${NGINX_DOMAIN}"]
-    paths: [/alertmanager]
+    enabled: false
   alertmanagerSpec:
-    routePrefix: /alertmanager
+    routePrefix: /
 
 grafana:
   adminPassword: prom-operator
   ingress:
-    enabled: true
-    hosts: ["grafana.${NGINX_DOMAIN}"]
-    path: /
+    enabled: false
   sidecar:
     dashboards:
       provider:
@@ -51,7 +45,6 @@ grafana:
       mountPath: /var/lib/grafana/plugins
   grafana.ini:
     server:
-      domain: "${OAM_DOMAIN}"
-      root_url: "%(protocol)s://%(domain)s/grafana"
+      domain: "grafana.${EXTERNAL_DOMAIN}"
       serve_from_sub_path: true
 

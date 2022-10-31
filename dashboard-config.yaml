@@ -26,20 +26,41 @@ metadata:
     kubernetes.io/service-account.name: admin-user
 type: kubernetes.io/service-account-token
 ---
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
 metadata:
-  name: kubernetes-dashboard-ingress
+  name: kubernetes-dashboard
   namespace: kubernetes-dashboard
 spec:
-  rules:
-    - host: "dashboard.${NGINX_DOMAIN}"
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: kubernetes-dashboard
-                port:
-                  number: 80
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: PASSTHROUGH
+    hosts:
+    - "dashboard.${EXTERNAL_DOMAIN}"
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: kubernetes-dashboard
+  namespace: kubernetes-dashboard
+spec:
+  hosts:
+  - "dashboard.${EXTERNAL_DOMAIN}"
+  gateways:
+  - kubernetes-dashboard
+  tls:
+  - match:
+    - port: 443
+      sniHosts:
+      - "dashboard.${EXTERNAL_DOMAIN}"
+    route:
+    - destination:
+        host: kubernetes-dashboard
+        port:
+          number: 443

@@ -4,7 +4,7 @@ This repo helps to setup a KinD (and K3s, MicroK8S, Vagrant+kubeadm) cluster fro
 Usage is published at [Environment for comparing several on-premise Kubernetes distributions (K3s, KinD, kubeadm)](https://pgillich.medium.com/environment-for-comparing-several-on-premise-kubernetes-distributions-k3s-kind-kubeadm-a53675a80a00).
 
 > This development branch supports Kubernetes 1.24.
-> Traefik is replaced to Nginx ingress.
+> Traefik is replaced to Istio Gateway and VirtualService.
 > Work in progress, WSL2 with KinD is in focus
 
 The solution is make-based, see more details in `Makefile` and `.env`.
@@ -115,6 +115,40 @@ make all DO_CNI=false DO_METALLB=false
 ```
 
 Post-install steps: please follow instructions of `make info-post`. Note: `info-post` target is called at the end of `make all`.
+
+## Istio
+
+Determining Node IP: <https://istio.io/latest/docs/tasks/traffic-management/ingress/ingress-control/>
+* https://kubernetes.io/docs/concepts/services-networking/service/#type-nodeport
+* https://istio.io/latest/docs/setup/getting-started/
+* https://istio.io/latest/docs/setup/install/helm/
+* https://istio.io/latest/docs/setup/additional-setup/customize-installation/
+* https://stackoverflow.com/questions/67538712/set-ingress-gateway-nodeport-with-isito-operator
+* https://istio.io/latest/docs/tasks/observability/gateways/
+* https://istio.io/v1.12/docs/examples/microservices-istio/istio-ingress-gateway/
+* https://istio.io/v1.1/docs/tasks/telemetry/gateways/
+
+* https://stackoverflow.com/questions/67187642/how-to-use-virtualservice-to-expose-dashboards-like-grafana-prometheus-and-kiali
+
+127.0.0.1:8001/api/v1/namespaces/istio-system/services/kiali:http/proxy/kiali/
+
+dashboards:
+  istio-extension-dashboard: 13277
+  istio-mesh-dashboard: 7639
+  istio-performance-dashboard: 11829
+  istio-service-dashboard: 7636
+  istio-workload-dashboard: 7630
+  pilot-dashboard: 7645
+
+## Post-install config
+
+Add below line to `/etc/hosts`:
+
+```text
+?.?.?.?       dashboard.kind-01.company.com grafana.kind-01.company.com prometheus.kind-01.company.com
+```
+
+Where the `?.?.?.?` is printed out by `info-post` target.
 
 ## Optional components
 

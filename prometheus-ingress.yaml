@@ -1,0 +1,73 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: monitoring
+  namespace: monitoring
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "prometheus.${EXTERNAL_DOMAIN}"
+    - "grafana.${EXTERNAL_DOMAIN}"
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  hosts:
+  - "prometheus.${EXTERNAL_DOMAIN}"
+  gateways:
+  - monitoring
+  http:
+  - name: alertmanager
+    match:
+    - uri:
+        prefix: "/alertmanager/"
+    rewrite:
+      uri: "/"
+    route:
+    - destination:
+        port:
+          number: 9093
+        host: prometheus-stack-kube-prom-alertmanager 
+  - name: prometheus
+    match:
+    - uri:
+        prefix: "/"
+    rewrite:
+      uri: "/"
+    route:
+    - destination:
+        port:
+          number: 9090
+        host: prometheus-stack-kube-prom-prometheus
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  hosts:
+  - "grafana.${EXTERNAL_DOMAIN}"
+  gateways:
+  - monitoring
+  http:
+  - name: grafana
+    match:
+    - uri:
+        prefix: "/"
+    rewrite:
+      uri: "/"
+    route:
+    - destination:
+        port:
+          number: 80
+        host: prometheus-stack-grafana

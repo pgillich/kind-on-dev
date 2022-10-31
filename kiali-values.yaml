@@ -1,0 +1,14 @@
+# helm repo add kiali https://kiali.org/helm-charts
+# 1.58.0
+# helm template   --namespace istio-system   --set auth.strategy="anonymous"   --repo https://kiali.org/helm-charts -f kiali-values.yaml   kiali-server   kiali-server
+deployment:
+  pod_labels:
+    sidecar.istio.io/inject: "false"
+  # ingress:
+  #   enabled: false
+  # ingress_enabled: false
+external_services:
+  grafana:
+    url: http://prometheus-stack-grafana.monitoring.svc
+  prometheus:
+    url: http://prometheus-stack-kube-prom-prometheus.monitoring.svc:9090
