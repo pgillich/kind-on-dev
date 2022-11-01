@@ -1,6 +1,24 @@
 apiVersion: install.istio.io/v1alpha1
 kind: IstioOperator
 spec:
+  # components:
+  #   ingressGateways:
+  #     - name: istio-ingressgateway
+  #       k8s:
+  #         nodeSelector:
+  #           ingress-ready: "true"
+
+  # components:
+  #   istiod:
+  #     nodeSelector:
+  #       node-type: istio
+  #   ingressGateway:
+  #     nodeSelector:
+  #       node-type: istio
+  #   cni:
+  #     nodeSelector:
+  #       node-type: istio
+
   # values:
   #   gateways:
   #     istio-ingressgateway:

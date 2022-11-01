@@ -287,6 +287,14 @@ istio:
 		--for=condition=Available --timeout=${ISTIO_WAIT} -n istio-system deployment.apps/kiali \
 		|| echo 'TIMEOUT' >&2
 
+.PHONY: delete-istio
+delete-istio:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete namespace istio-system
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl get crd -oname | grep --color=never 'istio.io' | KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml xargs kubectl delete
+
 .PHONY: nfs
 nfs:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
@@ -390,14 +398,7 @@ delete-prometheus:
 ifeq (${DO_PROMETHEUS}, true)
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm uninstall ${PROMETHEUS_HELM_RELEASE_NAME} -n ${PROMETHEUS_NAMESPACE}
 
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete crd alertmanagerconfigs.monitoring.coreos.com
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete crd alertmanagers.monitoring.coreos.com
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete crd podmonitors.monitoring.coreos.com
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete crd probes.monitoring.coreos.com
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete crd prometheuses.monitoring.coreos.com
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete crd prometheusrules.monitoring.coreos.com
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete crd servicemonitors.monitoring.coreos.com
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete crd thanosrulers.monitoring.coreos.com
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl get crd -oname | grep --color=never 'monitoring.coreos.com' | KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml xargs kubectl delete
 endif
 
 .SILENT: info-post
