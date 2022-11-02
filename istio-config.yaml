@@ -1,56 +1,8 @@
 apiVersion: install.istio.io/v1alpha1
 kind: IstioOperator
 spec:
-  # components:
-  #   ingressGateways:
-  #     - name: istio-ingressgateway
-  #       k8s:
-  #         nodeSelector:
-  #           ingress-ready: "true"
-
-  # components:
-  #   istiod:
-  #     nodeSelector:
-  #       node-type: istio
-  #   ingressGateway:
-  #     nodeSelector:
-  #       node-type: istio
-  #   cni:
-  #     nodeSelector:
-  #       node-type: istio
-
-  # values:
-  #   gateways:
-  #     istio-ingressgateway:
-  #       type: NodePort
-  # components:
-  #   ingressGateways:
-  #     - enabled: true
-  #       k8s:
-  #         resources:
-  #           requests:
-  #             cpu: 10m
-  #             memory: 40Mi
-  #         service:
-  #           ports:
-  #           - name: status-port
-  #             port: 15021
-  #             targetPort: 15021
-  #             nodePort: 31021
-  #           - name: http2
-  #             port: 80
-  #             targetPort: 8080
-  #             nodePort: 31080
-  #           - name: https
-  #             port: 443
-  #             targetPort: 8443
-  #             nodePort: 31443
-  #           - name: tcp
-  #             port: 31400
-  #             targetPort: 31400
-  #             nodePort: 31400
-  #           - name: tls
-  #             port: 15443
-  #             targetPort: 15443
-  #             nodePort: 31444
-  #       name: istio-ingressgateway
+  meshConfig:
+    defaultConfig:
+      tracing:
+        zipkin:
+          address: jaeger-collector:9411 

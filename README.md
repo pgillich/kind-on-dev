@@ -6,6 +6,7 @@ Usage is published at [Environment for comparing several on-premise Kubernetes d
 > This development branch supports Kubernetes 1.24.
 > Traefik is replaced to Istio Gateway and VirtualService.
 > Work in progress, WSL2 with KinD is in focus
+> Created for my article <https://pgillich.medium.com/istio-tracing-with-jaeger-756ed9872e73>
 
 The solution is make-based, see more details in `Makefile` and `.env`.
 

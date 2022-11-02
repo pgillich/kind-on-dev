@@ -1,0 +1,126 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    name: jaeger
+  name: jaeger
+  namespace: istio-system
+spec:
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 16686
+  selector:
+    app: jaeger
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: telemetry
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "prometheus.${EXTERNAL_DOMAIN}"
+    - "grafana.${EXTERNAL_DOMAIN}"
+    - "jaeger.${EXTERNAL_DOMAIN}"
+    - "jaeger-collector.${EXTERNAL_DOMAIN}"
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: prometheus
+  namespace: istio-system
+spec:
+  hosts:
+  - "prometheus.${EXTERNAL_DOMAIN}"
+  gateways:
+  - telemetry
+  http:
+  - name: prometheus
+    match:
+    - uri:
+        prefix: "/"
+    rewrite:
+      uri: "/"
+    route:
+    - destination:
+        port:
+          number: 9090
+        host: prometheus
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: grafana
+  namespace: istio-system
+spec:
+  hosts:
+  - "grafana.${EXTERNAL_DOMAIN}"
+  gateways:
+  - telemetry
+  http:
+  - name: grafana
+    match:
+    - uri:
+        prefix: "/"
+    rewrite:
+      uri: "/"
+    route:
+    - destination:
+        port:
+          number: 3000
+        host: grafana
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: jaeger
+  namespace: istio-system
+spec:
+  hosts:
+  - "jaeger.${EXTERNAL_DOMAIN}"
+  gateways:
+  - telemetry
+  http:
+  - name: jaeger
+    match:
+    - uri:
+        prefix: "/"
+    rewrite:
+      uri: "/"
+    route:
+    - destination:
+        port:
+          number: 80
+        host: jaeger
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: jaeger-collector
+  namespace: istio-system
+spec:
+  hosts:
+  - "jaeger-collector.${EXTERNAL_DOMAIN}"
+  gateways:
+  - telemetry
+  http:
+  - name: jaeger-collector
+    match:
+    - uri:
+        prefix: "/"
+    rewrite:
+      uri: "/"
+    route:
+    - destination:
+        port:
+          number: 14268
+        host: jaeger-collector

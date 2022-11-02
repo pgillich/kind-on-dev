@@ -17,7 +17,7 @@ helm-repo-stable = (helm repo add stable https://charts.helm.sh/stable && helm r
 include .env
 
 .PHONY: all
-all: cluster cni metallb metrics istio dashboard prometheus info-post
+all: cluster cni metallb metrics istio telemetry kiali dashboard info-post
 
 .PHONY: no-net
 no-net: cluster metallb metrics dashboard prometheus info-post
@@ -268,23 +268,14 @@ endif
 istio:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
-	cd /tmp \
+	cd ${ISTIO_DIR} \
 		&& curl -sL https://istio.io/downloadIstio | ISTIO_VERSION=${ISTIO_VERSION} TARGET_ARCH=x86_64 sh -
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml \
-		/tmp/istio-${ISTIO_VERSION}/bin/istioctl install --set profile=demo -f istio-config.yaml -y
+		${ISTIO_DIR}/istio-${ISTIO_VERSION}/bin/istioctl install --set profile=demo -f istio-config.yaml -y
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
 		--for=condition=Ready --timeout=${ISTIO_WAIT} -n istio-system pod --all \
-		|| echo 'TIMEOUT' >&2
-
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f /tmp/istio-${ISTIO_VERSION}/samples/addons/kiali.yaml
-
-	cat istio-ingress.yaml | EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
-		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f -
-
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
-		--for=condition=Available --timeout=${ISTIO_WAIT} -n istio-system deployment.apps/kiali \
 		|| echo 'TIMEOUT' >&2
 
 .PHONY: delete-istio
@@ -294,6 +285,42 @@ delete-istio:
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete namespace istio-system
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl get crd -oname | grep --color=never 'istio.io' | KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml xargs kubectl delete
+
+.PHONY: kiali
+kiali:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	helm repo add kiali https://kiali.org/helm-charts && helm repo update
+
+	cat kiali-values.yaml | KIALI_GRAFANA_URL=${KIALI_GRAFANA_URL} KIALI_PROMETHEUS_URL=${KIALI_PROMETHEUS_URL} EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
+		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install kiali-server kiali/kiali-server \
+		-n istio-system --version ${KIALI_VERSION} -f -
+
+	cat istio-ingress.yaml | EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
+		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f -
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
+		--for=condition=Available --timeout=${ISTIO_WAIT} -n istio-system deployment.apps/kiali \
+		|| echo 'TIMEOUT' >&2
+
+.PHONY: telemetry
+telemetry:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml \
+		kubectl apply -f ${ISTIO_DIR}/istio-${ISTIO_VERSION}/samples/addons/jaeger.yaml
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml \
+		kubectl apply -f ${ISTIO_DIR}/istio-${ISTIO_VERSION}/samples/addons/prometheus.yaml
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml \
+		kubectl apply -f ${ISTIO_DIR}/istio-${ISTIO_VERSION}/samples/addons/grafana.yaml
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${K3S_WAIT} -n istio-system pod --all \
+		|| echo 'TIMEOUT' >&2
+
+	cat telemetry-ingress.yaml | EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
+		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f -
 
 .PHONY: nfs
 nfs:
@@ -409,8 +436,10 @@ info-post:
 	echo -e "Using custom kubectl config file:\nKUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl ...\nKUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm ..."
 
 ifeq (${OAM_IP},)
-	echo -e "\nAdd below line to /etc/hosts:\n$$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}')       istio.${EXTERNAL_DOMAIN} dashboard.${EXTERNAL_DOMAIN} grafana.${EXTERNAL_DOMAIN} prometheus.${EXTERNAL_DOMAIN}"
-	echo -e "\nAdd below line to C:\windows\system32\drivers\etc\hosts:\n`ip a show dev eth0 scope global | grep -oP 'inet \K[0-9.]+'` dashboard.${EXTERNAL_DOMAIN} grafana.${EXTERNAL_DOMAIN} prometheus.${EXTERNAL_DOMAIN}"
+	echo -e "\nAdd below line to /etc/hosts:\n$$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}')" \
+	  "  istio.${EXTERNAL_DOMAIN} dashboard.${EXTERNAL_DOMAIN} grafana.${EXTERNAL_DOMAIN} prometheus.${EXTERNAL_DOMAIN} jaeger.${EXTERNAL_DOMAIN} jaeger-collector.${EXTERNAL_DOMAIN}"
+	echo -e "\nAdd below line to C:\windows\system32\drivers\etc\hosts:\n`ip a show dev eth0 scope global | grep -oP 'inet \K[0-9.]+'`" \
+	  "  istio.${EXTERNAL_DOMAIN} dashboard.${EXTERNAL_DOMAIN} grafana.${EXTERNAL_DOMAIN} prometheus.${EXTERNAL_DOMAIN} jaeger.${EXTERNAL_DOMAIN} jaeger-collector.${EXTERNAL_DOMAIN}"
 else
 	echo -e "\nAdd below line to /etc/hosts:\n${OAM_IP} dashboard.${EXTERNAL_DOMAIN} grafana.${EXTERNAL_DOMAIN} prometheus.${EXTERNAL_DOMAIN}"
 endif
@@ -423,12 +452,15 @@ endif
 
 	echo -e "\nKiali URL:\nhttp://istio.${EXTERNAL_DOMAIN}/kiali/"
 
-	echo -e "\nPrometheus URL:\nhttp://prometheus.${EXTERNAL_DOMAIN}"
+	echo -e "\nPrometheus URL:\nhttp://prometheus.${EXTERNAL_DOMAIN}/"
 
 	echo -e "\nAlertmanager URL:\nhttp://prometheus.${EXTERNAL_DOMAIN}/alertmanager/"
 
-	echo -e "\nGrafana URL:\nhttp://grafana.${EXTERNAL_DOMAIN}"
+	echo -e "\nGrafana URL:\nhttp://grafana.${EXTERNAL_DOMAIN}/"
 	echo -n "  admin / "; grep -Po 'adminPassword:[\s]*\K.*' prometheus-values.yaml
+
+	echo -e "\nJaeger URL:\nhttp://jaeger.${EXTERNAL_DOMAIN}/"
+	echo -e "\nJaeger Collector URL:\nhttp://jaeger-collector.${EXTERNAL_DOMAIN}/api/traces"
 
 	if [ $$(cat /proc/sys/fs/inotify/max_user_watches) -lt 524288 ]; then echo -e "\nWARNING! max_user_watches should be increased, see README.md"; fi
 	if [ $$(cat /proc/sys/fs/inotify/max_user_instances) -lt 8196 ]; then echo -e "\nWARNING! max_user_instances should be increased, see README.md"; fi
