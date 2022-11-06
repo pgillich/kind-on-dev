@@ -1,0 +1,13 @@
+promtail:
+  config:
+    snippets:
+      pipelineStages:
+      - docker: {}
+      - match:
+          selector: '{component="opentracing-example"}'
+          stages:
+          - regex:
+              expression: '.*(?P<trace>TraceID)\\":\\"(?P<traceID>[a-zA-Z0-9]+).*'
+              traceID: traceID
+          - labels:
+              traceID:

@@ -12,7 +12,7 @@ else
 vagrant = PATH=$$(cygpath "$$WINDIR/System32/OpenSSH"):$$PATH vagrant
 endif
 
-helm-repo-stable = (helm repo add stable https://charts.helm.sh/stable && helm repo update)
+helm-repo-stable = (helm repo add stable https://charts.helm.sh/stable && helm repo update stable)
 
 include .env
 
@@ -290,10 +290,10 @@ delete-istio:
 kiali:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
-	helm repo add kiali https://kiali.org/helm-charts && helm repo update
+	helm repo add kiali https://kiali.org/helm-charts && helm repo update kiali
 
 	cat kiali-values.yaml | KIALI_GRAFANA_URL=${KIALI_GRAFANA_URL} KIALI_PROMETHEUS_URL=${KIALI_PROMETHEUS_URL} EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
-		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install kiali-server kiali/kiali-server \
+		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install --create-namespace kiali-server kiali/kiali-server \
 		-n istio-system --version ${KIALI_VERSION} -f -
 
 	cat istio-ingress.yaml | EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
@@ -319,6 +319,9 @@ telemetry:
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${K3S_WAIT} -n istio-system pod --all \
 		|| echo 'TIMEOUT' >&2
 
+	helm repo add grafana https://grafana.github.io/helm-charts && helm repo update grafana
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install loki --namespace=istio-system -f loki-values.yaml grafana/loki-stack
+
 	cat telemetry-ingress.yaml | EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
 		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f -
 
@@ -326,7 +329,7 @@ telemetry:
 nfs:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
-	cat nfs-values.yaml | KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm install nfs-provisioner stable/nfs-server-provisioner -f -
+	cat nfs-values.yaml | KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install --create-namespace nfs-provisioner stable/nfs-server-provisioner -f -
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
 		-l app=nfs-server-provisioner --for=condition=ready --timeout=${NFS_WAIT} pod \
@@ -361,9 +364,9 @@ metrics-vagrant: metrics-official
 metrics-official:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
-  helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ && helm repo update
+  helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ && helm repo update metrics-server
 
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm install metrics-server metrics-server/metrics-server --version ${METRICS_VERSION} \
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install --create-namespace metrics-server metrics-server/metrics-server --version ${METRICS_VERSION} \
 		--set 'args={--kubelet-insecure-tls, --kubelet-preferred-address-types=InternalIP}' --namespace kube-system
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
@@ -405,11 +408,10 @@ ifeq (${DO_PROMETHEUS}, true)
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl create namespace ${PROMETHEUS_NAMESPACE} \
 		--dry-run -o yaml | KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f -
 
-	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-	helm repo update
+	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts && helm repo update prometheus-community
 
 	cat prometheus-values.yaml | EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
-		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm install ${PROMETHEUS_HELM_RELEASE_NAME} prometheus-community/kube-prometheus-stack \
+		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install --create-namespace ${PROMETHEUS_HELM_RELEASE_NAME} prometheus-community/kube-prometheus-stack \
 		-n ${PROMETHEUS_NAMESPACE} --version ${PROMETHEUS_CHART_VERSION} -f -
 
 	cat prometheus-ingress.yaml | EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
@@ -423,6 +425,8 @@ endif
 .PHONY: delete-prometheus
 delete-prometheus:
 ifeq (${DO_PROMETHEUS}, true)
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm uninstall ${PROMETHEUS_HELM_RELEASE_NAME} -n ${PROMETHEUS_NAMESPACE}
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl get crd -oname | grep --color=never 'monitoring.coreos.com' | KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml xargs kubectl delete
@@ -470,17 +474,25 @@ destroy: destroy-${K8S_DISTRIBUTION}
 
 .PHONY: destroy-k3s
 destroy-k3s:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
 	/usr/local/bin/k3s-uninstall.sh || echo "ALREADY UNINSTALLED"
 	sudo rm -rf /var/lib/rancher/k3s/ /etc/rancher/k3s
 
 .PHONY: destroy-kind
 destroy-kind:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
 	kind delete cluster --name ${CLUSTER_NAME}
 
 .PHONY: destroy-micro
 destroy-micro:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml microk8s reset --destroy-storage
 
 .PHONY: destroy-vagrant
 destroy-vagrant:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
 	cd kubeadm-vagrant/Ubuntu; $(vagrant) destroy
