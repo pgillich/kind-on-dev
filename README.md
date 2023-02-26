@@ -117,6 +117,8 @@ make all DO_CNI=false DO_METALLB=false
 
 Post-install steps: please follow instructions of `make info-post`. Note: `info-post` target is called at the end of `make all`.
 
+> Parellel with deployments on KinD (or after) the `make drop-caches` should be run sometime.
+
 ## Istio
 
 Determining Node IP: <https://istio.io/latest/docs/tasks/traffic-management/ingress/ingress-control/>

@@ -162,6 +162,12 @@ cluster-kind:
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${KIND_WAIT} -A pod --all \
 		|| echo 'TIMEOUT' >&2
 
+.PHONY: drop-caches
+drop-caches:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	sudo sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches'
+
 .PHONY: cluster-vagrant
 cluster-vagrant:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
@@ -268,7 +274,7 @@ endif
 istio:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
-	cd ${ISTIO_DIR} \
+	mkdir -p ${ISTIO_DIR}; cd ${ISTIO_DIR} \
 		&& curl -sL https://istio.io/downloadIstio | ISTIO_VERSION=${ISTIO_VERSION} TARGET_ARCH=x86_64 sh -
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml \
@@ -364,7 +370,7 @@ metrics-vagrant: metrics-official
 metrics-official:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
-  helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ && helm repo update metrics-server
+	helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ && helm repo update metrics-server
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install --create-namespace metrics-server metrics-server/metrics-server --version ${METRICS_VERSION} \
 		--set 'args={--kubelet-insecure-tls, --kubelet-preferred-address-types=InternalIP}' --namespace kube-system
