@@ -17,7 +17,7 @@ helm-repo-stable = (helm repo add stable https://charts.helm.sh/stable && helm r
 include .env
 
 .PHONY: all
-all: cluster cni metallb metrics istio telemetry kiali dashboard info-post
+all: cluster cni metallb metrics istio telemetry tempo kiali dashboard info-post
 
 .PHONY: no-net
 no-net: cluster metallb metrics dashboard prometheus info-post
@@ -331,6 +331,16 @@ telemetry:
 	cat telemetry-ingress.yaml | EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
 		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f -
 
+.PHONY: tempo
+tempo:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	helm repo add grafana https://grafana.github.io/helm-charts && helm repo update grafana
+	helm upgrade --install tempo grafana/tempo -n istio-system -f tempo-values.yaml
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${K3S_WAIT} -n istio-system pod --all \
+		|| echo 'TIMEOUT' >&2
+
 .PHONY: nfs
 nfs:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
@@ -447,9 +457,9 @@ info-post:
 
 ifeq (${OAM_IP},)
 	echo -e "\nAdd below line to /etc/hosts:\n$$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}')" \
-	  "  istio.${EXTERNAL_DOMAIN} dashboard.${EXTERNAL_DOMAIN} grafana.${EXTERNAL_DOMAIN} prometheus.${EXTERNAL_DOMAIN} jaeger.${EXTERNAL_DOMAIN} jaeger-collector.${EXTERNAL_DOMAIN}"
+	  "  istio.${EXTERNAL_DOMAIN} dashboard.${EXTERNAL_DOMAIN} grafana.${EXTERNAL_DOMAIN} prometheus.${EXTERNAL_DOMAIN} jaeger.${EXTERNAL_DOMAIN} jaeger-collector.${EXTERNAL_DOMAIN}" tempo.${EXTERNAL_DOMAIN}" tempo-collector.${EXTERNAL_DOMAIN}"
 	echo -e "\nAdd below line to C:\windows\system32\drivers\etc\hosts:\n`ip a show dev eth0 scope global | grep -oP 'inet \K[0-9.]+'`" \
-	  "  istio.${EXTERNAL_DOMAIN} dashboard.${EXTERNAL_DOMAIN} grafana.${EXTERNAL_DOMAIN} prometheus.${EXTERNAL_DOMAIN} jaeger.${EXTERNAL_DOMAIN} jaeger-collector.${EXTERNAL_DOMAIN}"
+	  "  istio.${EXTERNAL_DOMAIN} dashboard.${EXTERNAL_DOMAIN} grafana.${EXTERNAL_DOMAIN} prometheus.${EXTERNAL_DOMAIN} jaeger.${EXTERNAL_DOMAIN} jaeger-collector.${EXTERNAL_DOMAIN}" tempo.${EXTERNAL_DOMAIN}" tempo-collector.${EXTERNAL_DOMAIN}"
 else
 	echo -e "\nAdd below line to /etc/hosts:\n${OAM_IP} dashboard.${EXTERNAL_DOMAIN} grafana.${EXTERNAL_DOMAIN} prometheus.${EXTERNAL_DOMAIN}"
 endif
@@ -471,6 +481,8 @@ endif
 
 	echo -e "\nJaeger URL:\nhttp://jaeger.${EXTERNAL_DOMAIN}/"
 	echo -e "\nJaeger Collector URL:\nhttp://jaeger-collector.${EXTERNAL_DOMAIN}/api/traces"
+
+	echo -e "\nTempo status:\nhttp://tempo.${EXTERNAL_DOMAIN}/status"
 
 	if [ $$(cat /proc/sys/fs/inotify/max_user_watches) -lt 524288 ]; then echo -e "\nWARNING! max_user_watches should be increased, see README.md"; fi
 	if [ $$(cat /proc/sys/fs/inotify/max_user_instances) -lt 8196 ]; then echo -e "\nWARNING! max_user_instances should be increased, see README.md"; fi

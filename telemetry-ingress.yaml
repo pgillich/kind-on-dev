@@ -32,6 +32,8 @@ spec:
     - "grafana.${EXTERNAL_DOMAIN}"
     - "jaeger.${EXTERNAL_DOMAIN}"
     - "jaeger-collector.${EXTERNAL_DOMAIN}"
+    - "tempo.${EXTERNAL_DOMAIN}"
+    - "tempo-collector.${EXTERNAL_DOMAIN}"
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
@@ -124,3 +126,49 @@ spec:
         port:
           number: 14268
         host: jaeger-collector
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: tempo
+  namespace: istio-system
+spec:
+  hosts:
+  - "tempo.${EXTERNAL_DOMAIN}"
+  gateways:
+  - telemetry
+  http:
+  - name: tempo
+    match:
+    - uri:
+        prefix: "/"
+    rewrite:
+      uri: "/"
+    route:
+    - destination:
+        port:
+          number: 3100
+        host: tempo
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: tempo-collector
+  namespace: istio-system
+spec:
+  hosts:
+  - "tempo-collector.${EXTERNAL_DOMAIN}"
+  gateways:
+  - telemetry
+  http:
+  - name: tempo-collector
+    match:
+    - uri:
+        prefix: "/"
+    rewrite:
+      uri: "/"
+    route:
+    - destination:
+        port:
+          number: 4318
+        host: tempo

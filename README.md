@@ -53,7 +53,7 @@ cat /proc/sys/fs/inotify/max_user_instances; echo fs.inotify.max_user_instances=
 Add below line to `/etc/hosts`:
 
 ```text
-127.0.2.1       dashboard.kind-01.company.com grafana.kind-01.company.com prometheus.kind-01.company.com
+127.0.2.1       istio.kind-01.company.com dashboard.kind-01.company.com grafana.kind-01.company.com prometheus.kind-01.company.com jaeger.kind-01.company.com jaeger-collector.kind-01.company.com tempo.kind-01.company.com
 ```
 
 On Windows with Vagrant+kubeadm, do below steps:
