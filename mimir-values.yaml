@@ -1,0 +1,17 @@
+# https://github.com/grafana/mimir/blob/main/operations/helm/charts/mimir-distributed/values.yaml
+
+mimir:
+  structuredConfig:
+    limits:
+      max_label_names_per_series: 50
+# querier:
+#   replicas: 1
+# ingester:
+#   replicas: 1
+#   zoneAwareReplication:
+#     enabled: false
+# store_gateway:
+#   zoneAwareReplication:
+#     enabled: false
+# query_scheduler:
+#   replicas: 1

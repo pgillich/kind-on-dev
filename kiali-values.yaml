@@ -1,3 +1,4 @@
+# https://github.com/kiali/helm-charts/blob/master/kiali-server/values.yaml
 auth:
   strategy: anonymous
 
@@ -10,11 +11,14 @@ deployment:
 external_services:
   tracing:
     enabled: true
-    use_grpc: false
-    in_cluster_url: 'http://tracing.istio-system.svc/jaeger'
+    provider: "tempo"
+    in_cluster_url: http://tempo.telemetry:3100
+    url: http://tempo.${EXTERNAL_DOMAIN}:3100 
+    use_grpc: true
+    grpc_port: 9095
   grafana:
     enabled: true
     url: 'http://grafana.${EXTERNAL_DOMAIN}'
-    in_cluster_url: http://grafana.istio-system.svc:3000
+    in_cluster_url: http://grafana.telemetry.svc:80
   prometheus:
-    url: "${KIALI_PROMETHEUS_URL}"
+    url: 	http://mimir-nginx.telemetry.svc:80/prometheus

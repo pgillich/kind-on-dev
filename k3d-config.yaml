@@ -1,0 +1,28 @@
+---
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: demo
+servers: 1
+agents: 3
+image: docker.io/rancher/k3s:v1.29.6-k3s1
+kubeAPI:
+  host: k3d-01.company.com
+ports:
+  - port: 8080:80 # same as `--port '8080:80@loadbalancer'`
+    nodeFilters:
+      - loadbalancer
+  - port: 9443:443 # same as `--port '9443:443@loadbalancer'`
+    nodeFilters:
+      - loadbalancer
+registries:   # define how registries should be created or used
+  create:     # creates a default registry to be used with the cluster; same as `--registry-create registry.localhost`
+    name: registry.k3d.local
+    host: "0.0.0.0"
+    hostPort: "5001"
+options:
+  k3s:
+    extraArgs:
+      - arg: --disable=traefik
+        nodeFilters:
+          - server:*

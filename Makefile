@@ -17,10 +17,7 @@ helm-repo-stable = (helm repo add stable https://charts.helm.sh/stable && helm r
 include .env
 
 .PHONY: all
-all: cluster cni metallb metrics istio telemetry tempo kiali dashboard info-post
-
-.PHONY: no-net
-no-net: cluster metallb metrics dashboard prometheus info-post
+all: cluster metrics dashboard istio telemetry info-post
 
 .PHONY: install-docker
 install-docker:
@@ -55,6 +52,12 @@ install-kubectl:
 
 .PHONY: install-k3s
 install-k3s: destroy-k3s
+
+.PHONY: install-k3d
+install-k3d: 
+	curl -Lo /tmp/k3d https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64
+	chmod +x /tmp/k3d
+	sudo mv /tmp/k3d /usr/local/bin
 
 .PHONY: install-kind
 install-kind:
@@ -130,6 +133,16 @@ cluster-k3s:
 
 	while [ $$(KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl get -A pod -o name | wc -l) -eq 0 ]; do sleep 1; done
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${K3S_WAIT} -A pod --all \
+		|| echo 'TIMEOUT' >&2
+
+.PHONY: cluster-k3d
+cluster-k3d:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	k3d cluster create --config ${K3D_CONFIG} --wait --timeout ${K3D_WAIT}
+	cp ~/.kube/config ~/.kube/${K8S_DISTRIBUTION}.yaml
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${K3D_WAIT} -A pod --all \
 		|| echo 'TIMEOUT' >&2
 
 .PHONY: cluster-micro
@@ -274,11 +287,22 @@ endif
 istio:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
+ifeq ($(K8S_DISTRIBUTION), k3d)
+	helm repo add istio https://istio-release.storage.googleapis.com/charts && helm repo update istio
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl create namespace istio-system || echo "Namespace already created"
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install istio-base istio/base --version ${ISTIO_VERSION} -n istio-system --wait
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install istiod istio/istiod --version ${ISTIO_VERSION} -n istio-system --wait
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install istio-ingressgateway --version ${ISTIO_VERSION} istio/gateway -n istio-system --wait
+
+	cat istio-ingress.yaml | EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
+		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f -
+else
 	mkdir -p ${ISTIO_DIR}; cd ${ISTIO_DIR} \
 		&& curl -sL https://istio.io/downloadIstio | ISTIO_VERSION=${ISTIO_VERSION} TARGET_ARCH=x86_64 sh -
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml \
 		${ISTIO_DIR}/istio-${ISTIO_VERSION}/bin/istioctl install --set profile=demo -f istio-config.yaml -y
+endif
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
 		--for=condition=Ready --timeout=${ISTIO_WAIT} -n istio-system pod --all \
@@ -299,46 +323,68 @@ kiali:
 	helm repo add kiali https://kiali.org/helm-charts && helm repo update kiali
 
 	cat kiali-values.yaml | KIALI_GRAFANA_URL=${KIALI_GRAFANA_URL} KIALI_PROMETHEUS_URL=${KIALI_PROMETHEUS_URL} EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
-		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install --create-namespace kiali-server kiali/kiali-server \
+		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install --version ${KIALI_VERSION} --create-namespace kiali-server kiali/kiali-server \
 		-n istio-system --version ${KIALI_VERSION} -f -
-
-	cat istio-ingress.yaml | EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
-		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f -
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
 		--for=condition=Available --timeout=${ISTIO_WAIT} -n istio-system deployment.apps/kiali \
 		|| echo 'TIMEOUT' >&2
 
 .PHONY: telemetry
-telemetry:
+telemetry: telemetry-common telemetry-loki telemetry-tempo telemetry-mimir telemetry-alloy telemetry-grafana
+
+.PHONY: telemetry-common
+telemetry-common:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml \
-		kubectl apply -f ${ISTIO_DIR}/istio-${ISTIO_VERSION}/samples/addons/jaeger.yaml
-
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml \
-		kubectl apply -f ${ISTIO_DIR}/istio-${ISTIO_VERSION}/samples/addons/prometheus.yaml
-
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml \
-		kubectl apply -f ${ISTIO_DIR}/istio-${ISTIO_VERSION}/samples/addons/grafana.yaml
-
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${K3S_WAIT} -n istio-system pod --all \
-		|| echo 'TIMEOUT' >&2
-
 	helm repo add grafana https://grafana.github.io/helm-charts && helm repo update grafana
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install loki --namespace=istio-system -f loki-values.yaml grafana/loki-stack
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f telemetry-namespace.yaml || echo "Namespace already created"
 
 	cat telemetry-ingress.yaml | EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
-		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f -
+		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -n telemetry -f -
 
-.PHONY: tempo
-tempo:
+.PHONY: telemetry-loki
+telemetry-loki:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install loki grafana/loki-stack --version ${LOKI_VERSION} -n telemetry -f loki-values.yaml
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${LOKI_WAIT} -n telemetry pod --all \
+		|| echo 'TIMEOUT' >&2
+
+.PHONY: telemetry-mimir
+telemetry-mimir:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install mimir grafana/mimir-distributed --version ${MIMIR_VERSION} -n telemetry -f mimir-values.yaml
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${MIMIR_WAIT} -n telemetry pod --all \
+		|| echo 'TIMEOUT' >&2
+
+.PHONY: telemetry-alloy
+telemetry-alloy:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -n telemetry -f alloy-config.yaml 
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install alloy grafana/alloy --version ${ALLOY_VERSION} -n telemetry -f alloy-values.yaml
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${ALLOY_WAIT} -n telemetry pod --all \
+		|| echo 'TIMEOUT' >&2
+
+.PHONY: telemetry-grafana
+telemetry-grafana:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install grafana grafana/grafana --version ${GRAFANA_VERSION} -n telemetry -f mimir-values.yaml
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${GRAFANA_WAIT} -n telemetry pod --all \
+		|| echo 'TIMEOUT' >&2
+
+.PHONY: telemetry-tempo
+telemetry-tempo:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	helm repo add grafana https://grafana.github.io/helm-charts && helm repo update grafana
-	helm upgrade --install tempo grafana/tempo -n istio-system -f tempo-values.yaml
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install tempo grafana/tempo -n telemetry -f tempo-values.yaml
 
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${K3S_WAIT} -n istio-system pod --all \
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${K3S_WAIT} -n telemetry pod --all \
 		|| echo 'TIMEOUT' >&2
 
 .PHONY: nfs
@@ -359,6 +405,12 @@ metrics-k3s:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
 	@tput setaf 3; echo -e "SKIPPED (already done by K3s)\n"; tput sgr0
+
+.PHONY: metrics-k3d
+metrics-k3d:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	@tput setaf 3; echo -e "SKIPPED (already done by K3d)\n"; tput sgr0
 
 .PHONY: metrics-micro
 metrics-micro:
@@ -393,6 +445,20 @@ metrics-official:
 dashboard:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
+ifeq ($(K8S_DISTRIBUTION), k3d)
+	helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/ && helm repo update kubernetes-dashboard
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard --create-namespace --namespace kubernetes-dashboard
+	
+	cat dashboard-config_${K8S_DISTRIBUTION}.yaml | EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
+		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f -
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl create \
+		-n kubernetes-dashboard token admin-user
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
+		--for=condition=Available --timeout=${DASHBOARD_WAIT} -n kubernetes-dashboard deployment/kubernetes-dashboard-web \
+		|| echo 'TIMEOUT' >&2
+else
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl create \
 		-f https://raw.githubusercontent.com/kubernetes/dashboard/${DASHBOARD_VERSION}/aio/deploy/recommended.yaml
 
@@ -405,6 +471,7 @@ dashboard:
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
 		--for=condition=Available --timeout=${DASHBOARD_WAIT} -n kubernetes-dashboard deployment/kubernetes-dashboard \
 		|| echo 'TIMEOUT' >&2
+endif
 
 .PHONY: delete-dashboard
 delete-dashboard:
@@ -416,38 +483,6 @@ delete-dashboard:
 
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl delete clusterrole kubernetes-dashboard
 
-.PHONY: prometheus
-prometheus:
-ifeq (${DO_PROMETHEUS}, true)
-	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
-
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl create namespace ${PROMETHEUS_NAMESPACE} \
-		--dry-run -o yaml | KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f -
-
-	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts && helm repo update prometheus-community
-
-	cat prometheus-values.yaml | EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
-		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install --create-namespace ${PROMETHEUS_HELM_RELEASE_NAME} prometheus-community/kube-prometheus-stack \
-		-n ${PROMETHEUS_NAMESPACE} --version ${PROMETHEUS_CHART_VERSION} -f -
-
-	cat prometheus-ingress.yaml | EXTERNAL_DOMAIN=${EXTERNAL_DOMAIN} envsubst \
-		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -f -
-
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait \
-		--for=condition=Ready --timeout=${PROMETHEUS_WAIT} -n ${PROMETHEUS_NAMESPACE} pod --all \
-		|| echo 'TIMEOUT' >&2
-endif
-
-.PHONY: delete-prometheus
-delete-prometheus:
-ifeq (${DO_PROMETHEUS}, true)
-	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
-
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm uninstall ${PROMETHEUS_HELM_RELEASE_NAME} -n ${PROMETHEUS_NAMESPACE}
-
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl get crd -oname | grep --color=never 'monitoring.coreos.com' | KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml xargs kubectl delete
-endif
-
 .SILENT: info-post
 .PHONY: info-post
 info-post:
@@ -457,9 +492,7 @@ info-post:
 
 ifeq (${OAM_IP},)
 	echo -e "\nAdd below line to /etc/hosts:\n$$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}')" \
-	  "  istio.${EXTERNAL_DOMAIN} dashboard.${EXTERNAL_DOMAIN} grafana.${EXTERNAL_DOMAIN} prometheus.${EXTERNAL_DOMAIN} jaeger.${EXTERNAL_DOMAIN} jaeger-collector.${EXTERNAL_DOMAIN}" tempo.${EXTERNAL_DOMAIN}" tempo-collector.${EXTERNAL_DOMAIN}"
-	echo -e "\nAdd below line to C:\windows\system32\drivers\etc\hosts:\n`ip a show dev eth0 scope global | grep -oP 'inet \K[0-9.]+'`" \
-	  "  istio.${EXTERNAL_DOMAIN} dashboard.${EXTERNAL_DOMAIN} grafana.${EXTERNAL_DOMAIN} prometheus.${EXTERNAL_DOMAIN} jaeger.${EXTERNAL_DOMAIN} jaeger-collector.${EXTERNAL_DOMAIN}" tempo.${EXTERNAL_DOMAIN}" tempo-collector.${EXTERNAL_DOMAIN}"
+	  "  istio.${EXTERNAL_DOMAIN} dashboard.${EXTERNAL_DOMAIN} grafana.${EXTERNAL_DOMAIN} mimir.${EXTERNAL_DOMAIN} tempo.${EXTERNAL_DOMAIN} tempo-collector.${EXTERNAL_DOMAIN}"
 else
 	echo -e "\nAdd below line to /etc/hosts:\n${OAM_IP} dashboard.${EXTERNAL_DOMAIN} grafana.${EXTERNAL_DOMAIN} prometheus.${EXTERNAL_DOMAIN}"
 endif
@@ -472,17 +505,23 @@ endif
 
 	echo -e "\nKiali URL:\nhttp://istio.${EXTERNAL_DOMAIN}/kiali/"
 
-	echo -e "\nPrometheus URL:\nhttp://prometheus.${EXTERNAL_DOMAIN}/"
-
-	echo -e "\nAlertmanager URL:\nhttp://prometheus.${EXTERNAL_DOMAIN}/alertmanager/"
+	echo -e "\nMimir URLs:"
+	echo -e "  Alertmanager:           http://mimir.${EXTERNAL_DOMAIN}/alertmanager/"
+	echo -e "  Tenant stats:           http://mimir.${EXTERNAL_DOMAIN}/distributor/all_user_stats"
+	echo -e "  HA tracker status:      http://mimir.${EXTERNAL_DOMAIN}/distributor/ha_tracker"
+	echo -e "  Alertmanager status:    http://mimir.${EXTERNAL_DOMAIN}/multitenant_alertmanager/status"
+	echo -e "  Alertmanager configs:   http://mimir.${EXTERNAL_DOMAIN}/multitenant_alertmanager/configs"
+	echo -e "  List rule groups:       http://mimir.${EXTERNAL_DOMAIN}/prometheus/config/v1/rules"
+	echo -e "  List Prometheus rules:  http://mimir.${EXTERNAL_DOMAIN}/prometheus/api/v1/rules"
+	echo -e "  List Prometheus alerts: http://mimir.${EXTERNAL_DOMAIN}/prometheus/api/v1/alerts"
+	echo -e "  Ruler ring status:      http://mimir.${EXTERNAL_DOMAIN}/ruler/ring"
 
 	echo -e "\nGrafana URL:\nhttp://grafana.${EXTERNAL_DOMAIN}/"
-	echo -n "  admin / "; grep -Po 'adminPassword:[\s]*\K.*' prometheus-values.yaml
-
-	echo -e "\nJaeger URL:\nhttp://jaeger.${EXTERNAL_DOMAIN}/"
-	echo -e "\nJaeger Collector URL:\nhttp://jaeger-collector.${EXTERNAL_DOMAIN}/api/traces"
+	echo -n "  admin / "; $(KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl get secret --namespace telemetry grafana -o jsonpath="{.data.admin-password}" | base64 --decode)
+	echo
 
 	echo -e "\nTempo status:\nhttp://tempo.${EXTERNAL_DOMAIN}/status"
+	echo -e "\nTempo Collector URL:\nhttp://tempo-collector.${EXTERNAL_DOMAIN}/v1/traces"
 
 	if [ $$(cat /proc/sys/fs/inotify/max_user_watches) -lt 524288 ]; then echo -e "\nWARNING! max_user_watches should be increased, see README.md"; fi
 	if [ $$(cat /proc/sys/fs/inotify/max_user_instances) -lt 8196 ]; then echo -e "\nWARNING! max_user_instances should be increased, see README.md"; fi
@@ -496,6 +535,12 @@ destroy-k3s:
 
 	/usr/local/bin/k3s-uninstall.sh || echo "ALREADY UNINSTALLED"
 	sudo rm -rf /var/lib/rancher/k3s/ /etc/rancher/k3s
+
+.PHONY: destroy-k3d
+destroy-k3d:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	k3d cluster delete ${CLUSTER_NAME}
 
 .PHONY: destroy-kind
 destroy-kind:

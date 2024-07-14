@@ -4,5 +4,6 @@ spec:
   meshConfig:
     defaultConfig:
       tracing:
+        sampling: 100
         zipkin:
-          address: jaeger-collector:9411 
+          address: tempo.telemetry.svc:9411

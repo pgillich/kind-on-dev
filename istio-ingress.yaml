@@ -12,7 +12,15 @@ spec:
       name: http
       protocol: HTTP
     hosts:
-    - "istio.${EXTERNAL_DOMAIN}"
+    - "*.${EXTERNAL_DOMAIN}"
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: PASSTHROUGH
+    hosts:
+    - "*.${EXTERNAL_DOMAIN}"
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
@@ -27,10 +35,9 @@ spec:
   http:
   - name: kiali
     match:
+    - port: 80
     - uri:
         prefix: /kiali/
-    rewrite:
-      uri: "/kiali/"
     route:
     - destination:
         host: kiali
