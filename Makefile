@@ -17,7 +17,7 @@ helm-repo-stable = (helm repo add stable https://charts.helm.sh/stable && helm r
 include .env
 
 .PHONY: all
-all: cluster metrics dashboard istio telemetry info-post
+all: cluster metrics istio kiali dashboard telemetry info-post
 
 .PHONY: install-docker
 install-docker:
@@ -348,7 +348,7 @@ telemetry-common:
 telemetry-loki:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install loki grafana/loki-stack --version ${LOKI_VERSION} -n telemetry -f loki-values.yaml
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install loki grafana/loki --version ${LOKI_VERSION} -n telemetry -f loki-values.yaml
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${LOKI_WAIT} -n telemetry pod --all \
 		|| echo 'TIMEOUT' >&2
 
@@ -517,7 +517,7 @@ endif
 	echo -e "  Ruler ring status:      http://mimir.${EXTERNAL_DOMAIN}/ruler/ring"
 
 	echo -e "\nGrafana URL:\nhttp://grafana.${EXTERNAL_DOMAIN}/"
-	echo -n "  admin / "; $(KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl get secret --namespace telemetry grafana -o jsonpath="{.data.admin-password}" | base64 --decode)
+	echo -n "  admin /" $$(KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl get secret --namespace telemetry grafana -o jsonpath="{.data.admin-password}" | base64 --decode)
 	echo
 
 	echo -e "\nTempo status:\nhttp://tempo.${EXTERNAL_DOMAIN}/status"

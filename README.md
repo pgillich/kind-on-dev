@@ -1,11 +1,11 @@
 # kind-on-dev
 
-This repo helps to setup a KinD (and K3s, MicroK8S, Vagrant+kubeadm) cluster from scratch.
+This repo helps to setup a K3d (and K3s, KinD, MicroK8S, Vagrant+kubeadm) cluster from scratch.
 Usage is published at [Environment for comparing several on-premise Kubernetes distributions (K3s, KinD, kubeadm)](https://pgillich.medium.com/environment-for-comparing-several-on-premise-kubernetes-distributions-k3s-kind-kubeadm-a53675a80a00).
 
 > This development branch supports Kubernetes 1.24.
 > Traefik is replaced to Istio Gateway and VirtualService.
-> Work in progress, WSL2 with KinD is in focus
+> Work in progress, WSL2 with K3d is in focus
 > Created for my article <https://pgillich.medium.com/istio-tracing-with-jaeger-756ed9872e73>
 
 The solution is make-based, see more details in `Makefile` and `.env`.
@@ -27,8 +27,9 @@ On Ununtu, run below commands, if something is missing or needed:
 
 * `make install-kubectl` (if not installed yet)
 * `make install-micro` (if MicroK8S not installed yet)
-* `make install-docker` (only for KinD)
+* `make install-docker` (only for KinD, K3d)
 * `make install-kind` (only for KinD)
+* `make install-k3d` (only for K3d)
 * `make install-kvm` (only for Vagrant + libvirt/KVM)
 * `make generate-vagrant` (only for Vagrant, needed)
 * `DO_VAGRANT_ALIAS=true make install-vagrant` (only for Vagrant, if not installed yet and `vagrant` would be used in CLI)
@@ -53,7 +54,7 @@ cat /proc/sys/fs/inotify/max_user_instances; echo fs.inotify.max_user_instances=
 Add below line to `/etc/hosts`:
 
 ```text
-127.0.2.1       istio.kind-01.company.com dashboard.kind-01.company.com grafana.kind-01.company.com prometheus.kind-01.company.com jaeger.kind-01.company.com jaeger-collector.kind-01.company.com tempo.kind-01.company.com
+127.0.2.1       k3d-01.company.com
 ```
 
 On Windows with Vagrant+kubeadm, do below steps:
@@ -117,7 +118,7 @@ make all DO_CNI=false DO_METALLB=false
 
 Post-install steps: please follow instructions of `make info-post`. Note: `info-post` target is called at the end of `make all`.
 
-> Parellel with deployments on KinD (or after) the `make drop-caches` should be run sometime.
+> Parellel with deployments on KinD or K3d (or after) the `make drop-caches` should be run sometime.
 
 ## Istio
 
@@ -196,7 +197,7 @@ make destroy
 
 ### WSL2
 
-Only WSL2 with KinD combination is supported.
+Only WSL2 with KinD and K3d combination is supported.
 
 Before starting the install, `max_user_watches` and `max_user_instances` must be set properly (`sysctl --system`).
 
