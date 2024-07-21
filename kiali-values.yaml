@@ -12,13 +12,17 @@ external_services:
   tracing:
     enabled: true
     provider: "tempo"
-    in_cluster_url: http://tempo.telemetry:3100
+    in_cluster_url: http://tempo.telemetry.svc:3100
     url: http://tempo.${EXTERNAL_DOMAIN}:3100 
     use_grpc: true
     grpc_port: 9095
+    query_scope:
+      k8s_cluster_name: "k3d-demo"
   grafana:
     enabled: true
     url: 'http://grafana.${EXTERNAL_DOMAIN}'
     in_cluster_url: http://grafana.telemetry.svc:80
   prometheus:
     url: 	http://mimir-nginx.telemetry.svc:80/prometheus
+    query_scope:
+      k8s_cluster_name: "k3d-demo"

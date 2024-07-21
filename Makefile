@@ -364,7 +364,8 @@ telemetry-mimir:
 telemetry-alloy:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
 
-	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -n telemetry -f alloy-config.yaml 
+	cat alloy-config.yaml | ALLOY_CONFIG="$$(echo '|'; cat alloy-config.alloy | sed 's/^/    /g')" envsubst \
+		| KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl apply -n telemetry -f -
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install alloy grafana/alloy --version ${ALLOY_VERSION} -n telemetry -f alloy-values.yaml
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${ALLOY_WAIT} -n telemetry pod --all \
 		|| echo 'TIMEOUT' >&2

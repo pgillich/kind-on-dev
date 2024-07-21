@@ -16,6 +16,40 @@ On Windows, only below combinations are supported with limitaitons:
 
 > Warning: This deployment is not secure and must be hardened before using it in production.
 
+## Initial configurations
+
+### Grafana Alloy
+
+Info:
+
+* <https://grafana.com/docs/alloy/latest/set-up/install/linux/>
+* <https://grafana.com/docs/alloy/latest/set-up/migrate/from-prometheus/>
+* <https://grafana.com/docs/alloy/latest/set-up/migrate/from-otelcol/>
+* <https://grafana.com/docs/alloy/latest/set-up/migrate/from-operator/>
+
+Getting Prometheus config from: <https://github.com/istio/istio/blob/master/samples/addons/prometheus.yaml>
+
+Converting Prometheus config to Grafana Alloy:
+
+```sh
+alloy convert --source-format prometheus -b prometheus.yaml
+```
+
+Additional initial config from: <https://github.com/grafana/alloy/blob/main/operations/helm/charts/alloy/config/example.alloy>
+
+Converting initial OTEL collector config [otlp-collector.yaml](otlp-collector.yaml) to Grafana Alloy:
+
+```sh
+alloy convert --source-format otelcol -b otlp-collector.yaml
+```
+
+Converting sample Promtail config from <https://grafana.com/docs/loki/latest/send-data/promtail/installation/#install-as-kubernetes-daemonset-recommended>:
+
+```sh
+alloy convert -f promtail ./promtail.yaml
+```
+
+
 ## Preparation
 
 Install below packages, if it's missing:

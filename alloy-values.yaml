@@ -4,4 +4,4 @@ alloy:
     name: alloy
     key: config.alloy
 controller:
-  type: deployment
+  type: daemonset

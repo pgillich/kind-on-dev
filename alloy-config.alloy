@@ -1,0 +1,736 @@
+//
+// General
+//
+
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+//
+// Receiver
+//
+
+// OTLP receiver
+// default grpc listen on "0.0.0.0:4317"
+// default http listen on "0.0.0.0:4318"
+//    "/v1/metrics"
+//    "/v1/logs"
+//    "/v1/traces"
+otelcol.receiver.otlp "default" {
+  grpc { }
+  http { }
+  output {
+    metrics = [otelcol.processor.memory_limiter.default.input]
+    logs    = [otelcol.processor.memory_limiter.default.input]
+    traces  = [otelcol.processor.memory_limiter.default.input]
+  }
+}
+
+// Prometheus receiver (internal)
+otelcol.receiver.prometheus "default" {
+  output {
+    metrics = [otelcol.processor.memory_limiter.default.input]
+  }
+}
+
+// Loki receiver (internal)
+otelcol.receiver.loki "default" {
+  output {
+    logs = [otelcol.processor.memory_limiter.default.input]
+  }
+}
+
+// Zipkin receiver
+// default listen on "0.0.0.0:9411"
+otelcol.receiver.zipkin "default" {
+  output {
+    traces = [otelcol.processor.memory_limiter.default.input]
+  }
+}
+
+//
+// Processor pipeline
+//
+
+// Memory protection, first pipeline item
+otelcol.processor.memory_limiter "default" {
+  check_interval = "1s"
+  limit          = "400MiB"
+  spike_limit    = "80MiB"
+
+  output {
+    metrics = [otelcol.processor.batch.default.input]
+    logs    = [otelcol.processor.batch.default.input]
+    traces  = [otelcol.processor.batch.default.input]
+  }
+}
+
+// Batch processing
+otelcol.processor.batch "default" {
+  timeout             = "10s"
+  send_batch_size     = 1000
+  send_batch_max_size = 1100
+
+  output {
+    metrics = [otelcol.processor.attributes.default.input]
+    logs    = [otelcol.processor.attributes.default.input]
+    traces  = [otelcol.processor.attributes.default.input]
+  }
+}
+
+// Set cluster name
+otelcol.processor.attributes "default" {
+  action {
+    key    = "k8s_cluster_name"
+    value  = "k3s-demo"
+    action = "insert"
+  }
+
+  output {
+          metrics = [otelcol.processor.attributes.last.input]
+          logs    = [otelcol.processor.attributes.last.input]
+          traces  = [otelcol.processor.attributes.last.input]
+  }
+}
+
+// Last pipeline item: output to several endpoints
+otelcol.processor.attributes "last" {
+  output {
+    metrics = [otelcol.exporter.prometheus.mimir.input]
+    logs    = [otelcol.exporter.loki.default.input]
+    traces  = [otelcol.exporter.otlphttp.tempo.input]
+  }
+}
+
+// 
+// Exporter
+// 
+
+otelcol.exporter.prometheus "mimir" {
+  forward_to = [prometheus.remote_write.mimir.receiver]
+}
+
+prometheus.remote_write "mimir" {
+  endpoint {
+    name = "receiver"
+    url  = "http://mimir-nginx.telemetry.svc:80/prometheus/api/v1/push"
+
+    queue_config {
+      capacity             = 2500
+      max_shards           = 200
+      max_samples_per_send = 500
+    }
+
+    metadata_config {
+      max_samples_per_send = 500
+    }
+  }
+}
+
+otelcol.exporter.loki "default" {
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki.telemetry.svc:80/api/v1/push"
+  }
+  external_labels = {}
+}
+
+otelcol.exporter.otlphttp "tempo" {
+  client {
+    endpoint           = "http://tempo.telemetry.svc:4317"
+    http2_ping_timeout = "0s"
+  }
+}
+
+// 
+// Log colector (migrated from Promtail)
+// 
+
+discovery.kubernetes "pod_logs" {
+  role = "pod"
+
+  // controller.type=daemonset: limit to pods on this node to reduce the amount you need to filter
+  selectors {
+    role  = "pod"
+    field = "spec.nodeName=" + env("<HOSTNAME>")
+  }
+}
+
+discovery.relabel "pod_logs" {
+  targets = discovery.kubernetes.pod_logs.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_node_name"]
+    target_label  = "__host__"
+  }
+
+  rule {
+    regex  = "__meta_kubernetes_pod_label_(.+)"
+    action = "labelmap"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_name"]
+    separator     = "/"
+    target_label  = "job"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_container_name"]
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+    separator     = "/"
+    target_label  = "__path__"
+    replacement   = "/var/log/pods/*$1/*.log"
+  }
+}
+
+local.file_match "pod_logs" {
+  path_targets = discovery.relabel.pod_logs.output
+}
+
+loki.source.file "pod_logs" {
+  targets               = local.file_match.pod_logs.targets
+  forward_to            = [loki.process.pod_logs.receiver]
+  legacy_positions_file = "/tmp/positions.yaml"
+}
+
+loki.process "pod_logs" {
+  forward_to = [otelcol.receiver.loki.default.receiver]
+
+  stage.docker { }
+}
+
+//
+// Metrics scraper (migrated from Prometheus)
+//
+
+discovery.kubernetes "kubernetes_apiservers" {
+  role = "endpoints"
+}
+
+discovery.kubernetes "kubernetes_nodes" {
+  role = "node"
+}
+
+discovery.kubernetes "kubernetes_nodes_cadvisor" {
+  role = "node"
+}
+
+discovery.kubernetes "kubernetes_service_endpoints" {
+  role = "endpoints"
+}
+
+discovery.kubernetes "kubernetes_service_endpoints_slow" {
+  role = "endpoints"
+}
+
+discovery.kubernetes "prometheus_pushgateway" {
+  role = "service"
+}
+
+discovery.kubernetes "kubernetes_services" {
+  role = "service"
+}
+
+discovery.kubernetes "kubernetes_pods" {
+  role = "pod"
+}
+
+discovery.kubernetes "kubernetes_pods_slow" {
+  role = "pod"
+}
+
+discovery.relabel "kubernetes_apiservers" {
+  targets = discovery.kubernetes.kubernetes_apiservers.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_service_name", "__meta_kubernetes_endpoint_port_name"]
+    regex         = "default;kubernetes;https"
+    action        = "keep"
+  }
+}
+
+discovery.relabel "kubernetes_nodes" {
+  targets = discovery.kubernetes.kubernetes_nodes.targets
+
+  rule {
+    regex  = "__meta_kubernetes_node_label_(.+)"
+    action = "labelmap"
+  }
+
+  rule {
+    target_label = "__address__"
+    replacement  = "kubernetes.default.svc:443"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_node_name"]
+    regex         = "(.+)"
+    target_label  = "__metrics_path__"
+    replacement   = "/api/v1/nodes/$1/proxy/metrics"
+  }
+}
+
+discovery.relabel "kubernetes_nodes_cadvisor" {
+  targets = discovery.kubernetes.kubernetes_nodes_cadvisor.targets
+
+  rule {
+    regex  = "__meta_kubernetes_node_label_(.+)"
+    action = "labelmap"
+  }
+
+  rule {
+    target_label = "__address__"
+    replacement  = "kubernetes.default.svc:443"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_node_name"]
+    regex         = "(.+)"
+    target_label  = "__metrics_path__"
+    replacement   = "/api/v1/nodes/$1/proxy/metrics/cadvisor"
+  }
+}
+
+discovery.relabel "kubernetes_service_endpoints" {
+  targets = discovery.kubernetes.kubernetes_service_endpoints.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_service_annotation_prometheus_io_scrape"]
+    regex         = "true"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_service_annotation_prometheus_io_scrape_slow"]
+    regex         = "true"
+    action        = "drop"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_service_annotation_prometheus_io_scheme"]
+    regex         = "(https?)"
+    target_label  = "__scheme__"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_service_annotation_prometheus_io_path"]
+    regex         = "(.+)"
+    target_label  = "__metrics_path__"
+  }
+
+  rule {
+    source_labels = ["__address__", "__meta_kubernetes_service_annotation_prometheus_io_port"]
+    regex         = "(.+?)(?::\\d+)?;(\\d+)"
+    target_label  = "__address__"
+    replacement   = "$1:$2"
+  }
+
+  rule {
+    regex       = "__meta_kubernetes_service_annotation_prometheus_io_param_(.+)"
+    replacement = "__param_$1"
+    action      = "labelmap"
+  }
+
+  rule {
+    regex  = "__meta_kubernetes_service_label_(.+)"
+    action = "labelmap"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_service_name"]
+    target_label  = "service"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_node_name"]
+    target_label  = "node"
+  }
+}
+
+discovery.relabel "kubernetes_service_endpoints_slow" {
+  targets = discovery.kubernetes.kubernetes_service_endpoints_slow.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_service_annotation_prometheus_io_scrape_slow"]
+    regex         = "true"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_service_annotation_prometheus_io_scheme"]
+    regex         = "(https?)"
+    target_label  = "__scheme__"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_service_annotation_prometheus_io_path"]
+    regex         = "(.+)"
+    target_label  = "__metrics_path__"
+  }
+
+  rule {
+    source_labels = ["__address__", "__meta_kubernetes_service_annotation_prometheus_io_port"]
+    regex         = "(.+?)(?::\\d+)?;(\\d+)"
+    target_label  = "__address__"
+    replacement   = "$1:$2"
+  }
+
+  rule {
+    regex       = "__meta_kubernetes_service_annotation_prometheus_io_param_(.+)"
+    replacement = "__param_$1"
+    action      = "labelmap"
+  }
+
+  rule {
+    regex  = "__meta_kubernetes_service_label_(.+)"
+    action = "labelmap"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_service_name"]
+    target_label  = "service"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_node_name"]
+    target_label  = "node"
+  }
+}
+
+discovery.relabel "prometheus_pushgateway" {
+  targets = discovery.kubernetes.prometheus_pushgateway.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_service_annotation_prometheus_io_probe"]
+    regex         = "pushgateway"
+    action        = "keep"
+  }
+}
+
+discovery.relabel "kubernetes_services" {
+  targets = discovery.kubernetes.kubernetes_services.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_service_annotation_prometheus_io_probe"]
+    regex         = "true"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__address__"]
+    target_label  = "__param_target"
+  }
+
+  rule {
+    target_label = "__address__"
+    replacement  = "blackbox"
+  }
+
+  rule {
+    source_labels = ["__param_target"]
+    target_label  = "instance"
+  }
+
+  rule {
+    regex  = "__meta_kubernetes_service_label_(.+)"
+    action = "labelmap"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_service_name"]
+    target_label  = "service"
+  }
+}
+
+discovery.relabel "kubernetes_pods" {
+  targets = discovery.kubernetes.kubernetes_pods.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
+    regex         = "true"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape_slow"]
+    regex         = "true"
+    action        = "drop"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scheme"]
+    regex         = "(https?)"
+    target_label  = "__scheme__"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
+    regex         = "(.+)"
+    target_label  = "__metrics_path__"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_port", "__meta_kubernetes_pod_ip"]
+    regex         = "(\\d+);(([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4})"
+    target_label  = "__address__"
+    replacement   = "[$2]:$1"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_port", "__meta_kubernetes_pod_ip"]
+    regex         = "(\\d+);((([0-9]+?)(\\.|$)){4})"
+    target_label  = "__address__"
+    replacement   = "$2:$1"
+  }
+
+  rule {
+    regex       = "__meta_kubernetes_pod_annotation_prometheus_io_param_(.+)"
+    replacement = "__param_$1"
+    action      = "labelmap"
+  }
+
+  rule {
+    regex  = "__meta_kubernetes_pod_label_(.+)"
+    action = "labelmap"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_phase"]
+    regex         = "Pending|Succeeded|Failed|Completed"
+    action        = "drop"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_node_name"]
+    target_label  = "node"
+  }
+}
+
+discovery.relabel "kubernetes_pods_slow" {
+  targets = discovery.kubernetes.kubernetes_pods_slow.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape_slow"]
+    regex         = "true"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scheme"]
+    regex         = "(https?)"
+    target_label  = "__scheme__"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
+    regex         = "(.+)"
+    target_label  = "__metrics_path__"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_port", "__meta_kubernetes_pod_ip"]
+    regex         = "(\\d+);(([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4})"
+    target_label  = "__address__"
+    replacement   = "[$2]:$1"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_port", "__meta_kubernetes_pod_ip"]
+    regex         = "(\\d+);((([0-9]+?)(\\.|$)){4})"
+    target_label  = "__address__"
+    replacement   = "$2:$1"
+  }
+
+  rule {
+    regex       = "__meta_kubernetes_pod_annotation_prometheus_io_param_(.+)"
+    replacement = "__param_$1"
+    action      = "labelmap"
+  }
+
+  rule {
+    regex  = "__meta_kubernetes_pod_label_(.+)"
+    action = "labelmap"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_phase"]
+    regex         = "Pending|Succeeded|Failed|Completed"
+    action        = "drop"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_node_name"]
+    target_label  = "node"
+  }
+}
+
+prometheus.scrape "prometheus" {
+  targets = [{
+    __address__ = "localhost:9090",
+  }]
+  forward_to      = [otelcol.receiver.prometheus.default.receiver]
+  job_name        = "prometheus"
+  scrape_interval = "15s"
+}
+
+prometheus.scrape "kubernetes_apiservers" {
+  targets         = discovery.relabel.kubernetes_apiservers.output
+  forward_to      = [otelcol.receiver.prometheus.default.receiver]
+  job_name        = "kubernetes-apiservers"
+  scrape_interval = "15s"
+  scheme          = "https"
+
+  authorization {
+    type             = "Bearer"
+    credentials_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+  }
+
+  tls_config {
+    ca_file              = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    insecure_skip_verify = true
+  }
+}
+
+prometheus.scrape "kubernetes_nodes" {
+  targets         = discovery.relabel.kubernetes_nodes.output
+  forward_to      = [otelcol.receiver.prometheus.default.receiver]
+  job_name        = "kubernetes-nodes"
+  scrape_interval = "15s"
+  scheme          = "https"
+
+  authorization {
+    type             = "Bearer"
+    credentials_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+  }
+
+  tls_config {
+    ca_file              = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    insecure_skip_verify = true
+  }
+}
+
+prometheus.scrape "kubernetes_nodes_cadvisor" {
+  targets         = discovery.relabel.kubernetes_nodes_cadvisor.output
+  forward_to      = [otelcol.receiver.prometheus.default.receiver]
+  job_name        = "kubernetes-nodes-cadvisor"
+  scrape_interval = "15s"
+  scheme          = "https"
+
+  authorization {
+    type             = "Bearer"
+    credentials_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+  }
+
+  tls_config {
+    ca_file              = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    insecure_skip_verify = true
+  }
+}
+
+prometheus.scrape "kubernetes_service_endpoints" {
+  targets         = discovery.relabel.kubernetes_service_endpoints.output
+  forward_to      = [otelcol.receiver.prometheus.default.receiver]
+  job_name        = "kubernetes-service-endpoints"
+  honor_labels    = true
+  scrape_interval = "15s"
+}
+
+prometheus.scrape "kubernetes_service_endpoints_slow" {
+  targets         = discovery.relabel.kubernetes_service_endpoints_slow.output
+  forward_to      = [otelcol.receiver.prometheus.default.receiver]
+  job_name        = "kubernetes-service-endpoints-slow"
+  honor_labels    = true
+  scrape_interval = "5m0s"
+  scrape_timeout  = "30s"
+}
+
+prometheus.scrape "prometheus_pushgateway" {
+  targets         = discovery.relabel.prometheus_pushgateway.output
+  forward_to      = [otelcol.receiver.prometheus.default.receiver]
+  job_name        = "prometheus-pushgateway"
+  honor_labels    = true
+  scrape_interval = "15s"
+}
+
+prometheus.scrape "kubernetes_services" {
+  targets      = discovery.relabel.kubernetes_services.output
+  forward_to   = [otelcol.receiver.prometheus.default.receiver]
+  job_name     = "kubernetes-services"
+  honor_labels = true
+  params       = {
+    module = ["http_2xx"],
+  }
+  scrape_interval = "15s"
+  metrics_path    = "/probe"
+}
+
+prometheus.scrape "kubernetes_pods" {
+  targets         = discovery.relabel.kubernetes_pods.output
+  forward_to      = [otelcol.receiver.prometheus.default.receiver]
+  job_name        = "kubernetes-pods"
+  honor_labels    = true
+  scrape_interval = "15s"
+}
+
+prometheus.scrape "kubernetes_pods_slow" {
+  targets         = discovery.relabel.kubernetes_pods_slow.output
+  forward_to      = [otelcol.receiver.prometheus.default.receiver]
+  job_name        = "kubernetes-pods-slow"
+  honor_labels    = true
+  scrape_interval = "5m0s"
+  scrape_timeout  = "30s"
+}
