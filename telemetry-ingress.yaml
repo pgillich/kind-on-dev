@@ -73,3 +73,41 @@ spec:
         port:
           number: 4318
         host: tempo
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: alloy
+spec:
+  hosts:
+  - "alloy.${EXTERNAL_DOMAIN}"
+  gateways:
+  - istio-system/istio-system
+  http:
+  - name: alloy
+    match:
+    - port: 80
+    route:
+    - destination:
+        port:
+          number: 12345
+        host: alloy
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: loki
+spec:
+  hosts:
+  - "loki.${EXTERNAL_DOMAIN}"
+  gateways:
+  - istio-system/istio-system
+  http:
+  - name: loki
+    match:
+    - port: 80
+    route:
+    - destination:
+        port:
+          number: 80
+        host: loki-gateway

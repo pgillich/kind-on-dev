@@ -4,6 +4,35 @@ mimir:
   structuredConfig:
     limits:
       max_label_names_per_series: 50
+      out_of_order_time_window: 15m
+      max_global_series_per_user: 500000
+      ingestion_rate: 50000
+      ingestion_burst_size: 500000
+
+runtimeConfig:
+  ingester_limits: # limits that each ingester replica enforces
+    max_ingestion_rate: 150000
+    max_series: 1500000
+    max_tenants: 1000
+    max_inflight_push_requests: 30000
+  distributor_limits: # limits that each distributor replica enforces
+    max_ingestion_rate: 150000
+    max_inflight_push_requests: 30000
+    max_inflight_push_requests_bytes: 0
+
+compactor:
+  sharding_ring:
+    wait_stability_max_duration: 10m
+    wait_active_instance_timeout: 15m
+
+store_gateway:
+  sharding_ring:
+    wait_stability_max_duration: 10m
+
+overrides_exporter:
+  ring:
+    wait_stability_max_duration: 10m
+
 # querier:
 #   replicas: 1
 # ingester:

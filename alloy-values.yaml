@@ -4,4 +4,7 @@ alloy:
     name: alloy
     key: config.alloy
 controller:
+  # Use deployment only for collecting metrics and traces
+  # type: deployment
+  # Use daemonset for collecting logs, metrics and traces
   type: daemonset

@@ -9,7 +9,7 @@ processors:
     actions:
     - action: insert
       key: k8s_cluster_name
-      value: k3s-demo
+      value: demo
   memory_limiter:
     check_interval: 1s
     limit_mib: 400

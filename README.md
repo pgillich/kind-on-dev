@@ -85,6 +85,12 @@ cat /proc/sys/fs/inotify/max_user_watches; echo fs.inotify.max_user_watches=5242
 cat /proc/sys/fs/inotify/max_user_instances; echo fs.inotify.max_user_instances=8196 | sudo tee /etc/sysctl.d/50_max_user_instances.conf && sudo sysctl --system; cat /proc/sys/fs/inotify/max_user_instances
 ```
 
+Linux swap should be disabled, for example:
+
+```sh
+sudo swapoff -a
+```
+
 Add below line to `/etc/hosts`:
 
 ```text
@@ -180,6 +186,8 @@ dashboards:
 
 ## Post-install config
 
+### Name resolution
+
 Add below line to `/etc/hosts`:
 
 ```text
@@ -187,6 +195,30 @@ Add below line to `/etc/hosts`:
 ```
 
 Where the `?.?.?.?` is printed out by `info-post` target.
+
+### Grafana Datasources
+
+#### Logs
+
+*Name: `Logs (loki)`*
+
+URL: `http://loki.telemetry.svc:3100/`
+
+HTTP header: `X-Scope-OrgID`: `self-monitoring`
+
+*Name: `Logs (alloy)`*
+
+URL: `http://loki.telemetry.svc:3100/`
+
+HTTP header: `X-Scope-OrgID`: `alloy`
+
+#### Metrics
+
+*Name: `Metrics (alloy)`*
+
+URL: `http://mimir-nginx.telemetry.svc:80/prometheus`
+
+HTTP header: `X-Scope-OrgID`: `alloy`
 
 ## Optional components
 
@@ -241,6 +273,43 @@ After restart, the WSL2 IP address will be changed. The WSL2 IP address for `C:\
 * `wsl.exe -- ip -4 a show dev eth0 scope global`
 
 It may be a solution: <https://github.com/microsoft/WSL/issues/4210#issuecomment-648570493>
+
+### Mimir install Jobs
+
+The install Job health checks are wrong and the job exits properly before the health check called, see:
+
+```sh
+kubectl get pod -n telemetry -w
+
+mimir-minio-post-job-j4b9m                     0/3     PodInitializing   0          4s
+mimir-minio-post-job-j4b9m                     2/3     Running           0          4s
+mimir-minio-post-job-j4b9m                     2/3     Running           0          10s
+mimir-minio-post-job-j4b9m                     3/3     Running           0          10s
+mimir-minio-post-job-j4b9m                     1/3     NotReady          0          15s
+
+mimir-make-minio-buckets-5.0.14-ffq7d          0/2     PodInitializing   0          4s
+mimir-make-minio-buckets-5.0.14-ffq7d          1/2     Running           0          8s
+mimir-make-minio-buckets-5.0.14-ffq7d          1/2     Running           0          13s
+mimir-make-minio-buckets-5.0.14-ffq7d          2/2     Running           0          13s
+mimir-make-minio-buckets-5.0.14-ffq7d          1/2     NotReady          0          15s
+```
+
+Workaround: if only the Job Pods aren't Ready, run below command in a new shell:
+
+```sh
+kubectl get pod -n telemetry
+kubectl delete job -n telemetry mimir-make-minio-buckets-5.0.14  mimir-minio-post-job
+```
+
+### Mimir Helm upgrade
+
+After Helm upgrade (executing the `make telemetry-mimir`) the `distributor` losts the zones and Mimir won't work.
+
+Workaround: reinstall by below command:
+
+```sh
+make delete-telemetry-mimir telemetry-mimir
+```
 
 ### Flannel
 

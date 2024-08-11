@@ -360,6 +360,12 @@ telemetry-mimir:
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${MIMIR_WAIT} -n telemetry pod --all \
 		|| echo 'TIMEOUT' >&2
 
+.PHONY: delete-telemetry-mimir
+delete-telemetry-mimir:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm delete mimir -n telemetry
+
 .PHONY: telemetry-alloy
 telemetry-alloy:
 	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
@@ -369,6 +375,12 @@ telemetry-alloy:
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm upgrade --install alloy grafana/alloy --version ${ALLOY_VERSION} -n telemetry -f alloy-values.yaml
 	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl wait --for=condition=Ready --timeout=${ALLOY_WAIT} -n telemetry pod --all \
 		|| echo 'TIMEOUT' >&2
+
+.PHONY: delete-telemetry-alloy
+delete-telemetry-alloy:
+	@tput setaf 6; echo -e "\nmake $@\n"; tput sgr0
+
+	KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml helm delete alloy -n telemetry
 
 .PHONY: telemetry-grafana
 telemetry-grafana:
@@ -493,7 +505,7 @@ info-post:
 
 ifeq (${OAM_IP},)
 	echo -e "\nAdd below line to /etc/hosts:\n$$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}')" \
-	  "  istio.${EXTERNAL_DOMAIN} dashboard.${EXTERNAL_DOMAIN} grafana.${EXTERNAL_DOMAIN} mimir.${EXTERNAL_DOMAIN} tempo.${EXTERNAL_DOMAIN} tempo-collector.${EXTERNAL_DOMAIN}"
+	  "  istio.${EXTERNAL_DOMAIN} dashboard.${EXTERNAL_DOMAIN} grafana.${EXTERNAL_DOMAIN} mimir.${EXTERNAL_DOMAIN} tempo.${EXTERNAL_DOMAIN} tempo-collector.${EXTERNAL_DOMAIN} alloy.${EXTERNAL_DOMAIN}"
 else
 	echo -e "\nAdd below line to /etc/hosts:\n${OAM_IP} dashboard.${EXTERNAL_DOMAIN} grafana.${EXTERNAL_DOMAIN} prometheus.${EXTERNAL_DOMAIN}"
 endif
@@ -516,6 +528,22 @@ endif
 	echo -e "  List Prometheus rules:  http://mimir.${EXTERNAL_DOMAIN}/prometheus/api/v1/rules"
 	echo -e "  List Prometheus alerts: http://mimir.${EXTERNAL_DOMAIN}/prometheus/api/v1/alerts"
 	echo -e "  Ruler ring status:      http://mimir.${EXTERNAL_DOMAIN}/ruler/ring"
+
+	echo -e "\nAlloy URL:\nhttp://alloy.${EXTERNAL_DOMAIN}/"
+	echo -e   "  metrics: http://alloy.${EXTERNAL_DOMAIN}/metrics"
+
+	echo -e "\nLoki URLs:"
+	echo -e "  Config:              http://loki.${EXTERNAL_DOMAIN}/config"
+	echo -e "  Memberlist status:   http://loki.${EXTERNAL_DOMAIN}/memberlist"
+	echo -e "  Ring status:         http://loki.${EXTERNAL_DOMAIN}/ring"
+	echo -e "  Distributor ring:    http://loki.${EXTERNAL_DOMAIN}/distributor/ring"
+	echo -e "  Compactor ring:      http://loki.${EXTERNAL_DOMAIN}/compactor/ring"
+	echo -e "  IndexGateway ring:   http://loki.${EXTERNAL_DOMAIN}/indexgateway/ring"
+	echo -e "  QueryScheduler ring: http://loki.${EXTERNAL_DOMAIN}/scheduler/ring"
+	echo -e "  Prom rules:          curl -H 'X-Scope-OrgID: <TENANT_ID>' http://loki.${EXTERNAL_DOMAIN}/prometheus/api/v1/rules"
+	echo -e "  Prom alerts:         curl -H 'X-Scope-OrgID: <TENANT_ID>' http://loki.${EXTERNAL_DOMAIN}/prometheus/api/v1/alerts"
+	echo -e "  Prom labels:         curl -H 'X-Scope-OrgID: <TENANT_ID>' http://loki.${EXTERNAL_DOMAIN}/loki/api/v1/labels"
+	echo -e "  Prom series:         curl -H 'X-Scope-OrgID: <TENANT_ID>' http://loki.${EXTERNAL_DOMAIN}/loki/api/v1/series"
 
 	echo -e "\nGrafana URL:\nhttp://grafana.${EXTERNAL_DOMAIN}/"
 	echo -n "  admin /" $$(KUBECONFIG=~/.kube/${K8S_DISTRIBUTION}.yaml kubectl get secret --namespace telemetry grafana -o jsonpath="{.data.admin-password}" | base64 --decode)

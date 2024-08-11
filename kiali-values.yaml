@@ -17,12 +17,14 @@ external_services:
     use_grpc: true
     grpc_port: 9095
     query_scope:
-      k8s_cluster_name: "k3d-demo"
+      k8s_cluster_name: "demo"
   grafana:
     enabled: true
     url: 'http://grafana.${EXTERNAL_DOMAIN}'
     in_cluster_url: http://grafana.telemetry.svc:80
   prometheus:
     url: 	http://mimir-nginx.telemetry.svc:80/prometheus
+    custom_headers:
+      X-Scope-OrgID: "alloy"
     query_scope:
-      k8s_cluster_name: "k3d-demo"
+      k8s_cluster_name: "demo"
